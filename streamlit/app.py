@@ -5,11 +5,7 @@ import numpy as np
 st.set_page_config(page_title="IRC Activity Planning Dashboard", layout="wide")
 
 st.title("IRC Activity Planning Dashboard")
-st.caption("Prototype dashboard for attendance trends, activity planning, and stakeholder recommendations.")
-
-# -----------------------------
-# Load Data
-# -----------------------------
+st.caption("Decision-support dashboard for attendance trends, activity gaps, and stakeholder recommendations.")
 
 @st.cache_data
 def load_data():
@@ -20,11 +16,31 @@ def load_data():
 
 activities, public, volunteers = load_data()
 
-# -----------------------------
-# Basic Cleaning
-# -----------------------------
+# Clean column names
+activities.columns = (
+    activities.columns
+    .str.strip()
+    .str.replace(" ", "", regex=False)
+    .str.replace("_", "", regex=False)
+)
 
-date_col = "Date" if "Date" in activities.columns else None
+public.columns = (
+    public.columns
+    .str.strip()
+    .str.replace(" ", "", regex=False)
+    .str.replace("_", "", regex=False)
+)
+
+volunteers.columns = (
+    volunteers.columns
+    .str.strip()
+    .str.replace(" ", "", regex=False)
+    .str.replace("_", "", regex=False)
+)
+
+# Date cleanup
+date_candidates = ["Date", "eventstartdate", "EventStartDate", "ActivityDate"]
+date_col = next((c for c in date_candidates if c in activities.columns), None)
 
 if date_col:
     activities[date_col] = pd.to_datetime(activities[date_col], errors="coerce")
@@ -33,12 +49,11 @@ if date_col:
     activities["MonthNum"] = activities[date_col].dt.month
     activities["DayOfWeek"] = activities[date_col].dt.day_name()
 
-# Add safe numeric columns
-for col in ["TotalVisitors", "VolunteerHours", "VisitorsRegistered", "VisitorNoShow", "WalkUp"]:
+# Numeric cleanup
+for col in ["TotalVisitors", "VolunteerHours", "VisitorsRegistered", "VisitorNoShow", "WalkUp", "Volunteers"]:
     if col in activities.columns:
         activities[col] = pd.to_numeric(activities[col], errors="coerce").fillna(0)
 
-# Attendance rate if possible
 if "VisitorsRegistered" in activities.columns and "VisitorNoShow" in activities.columns:
     activities["ActualVisitors"] = activities["VisitorsRegistered"] - activities["VisitorNoShow"]
     activities["AttendanceRate"] = np.where(
@@ -46,34 +61,29 @@ if "VisitorsRegistered" in activities.columns and "VisitorNoShow" in activities.
         activities["ActualVisitors"] / activities["VisitorsRegistered"],
         np.nan
     )
-elif "TotalVisitors" in activities.columns:
-    activities["ActualVisitors"] = activities["TotalVisitors"]
+    activities["NoShowRate"] = np.where(
+        activities["VisitorsRegistered"] > 0,
+        activities["VisitorNoShow"] / activities["VisitorsRegistered"],
+        np.nan
+    )
+else:
+    activities["ActualVisitors"] = activities["TotalVisitors"] if "TotalVisitors" in activities.columns else 0
     activities["AttendanceRate"] = np.nan
+    activities["NoShowRate"] = np.nan
 
-# -----------------------------
-# Sidebar Filters
-# -----------------------------
-
+# Sidebar filters
 st.sidebar.header("Filters")
 
 filtered = activities.copy()
 
 if "ActivityType" in activities.columns:
     activity_types = sorted(activities["ActivityType"].dropna().unique())
-    selected_types = st.sidebar.multiselect(
-        "Activity Type",
-        activity_types,
-        default=activity_types
-    )
+    selected_types = st.sidebar.multiselect("Activity Type", activity_types, default=activity_types)
     filtered = filtered[filtered["ActivityType"].isin(selected_types)]
 
 if "Year" in activities.columns and activities["Year"].notna().any():
-    years = sorted(activities["Year"].dropna().unique().astype(int))
-    selected_years = st.sidebar.multiselect(
-        "Year",
-        years,
-        default=years
-    )
+    years = sorted(activities["Year"].dropna().astype(int).unique())
+    selected_years = st.sidebar.multiselect("Year", years, default=years)
     filtered = filtered[filtered["Year"].isin(selected_years)]
 
 if "Month" in activities.columns:
@@ -82,242 +92,287 @@ if "Month" in activities.columns:
         "July", "August", "September", "October", "November", "December"
     ]
     available_months = [m for m in month_order if m in activities["Month"].dropna().unique()]
-    selected_months = st.sidebar.multiselect(
-        "Month",
-        available_months,
-        default=available_months
-    )
+    selected_months = st.sidebar.multiselect("Month", available_months, default=available_months)
     filtered = filtered[filtered["Month"].isin(selected_months)]
 
 if "TotalVisitors" in activities.columns:
-    min_visitors = int(activities["TotalVisitors"].min())
-    max_visitors = int(activities["TotalVisitors"].max())
-
     visitor_range = st.sidebar.slider(
         "Total Visitors Range",
-        min_value=min_visitors,
-        max_value=max_visitors,
-        value=(min_visitors, max_visitors)
+        int(activities["TotalVisitors"].min()),
+        int(activities["TotalVisitors"].max()),
+        (int(activities["TotalVisitors"].min()), int(activities["TotalVisitors"].max()))
     )
+    filtered = filtered[filtered["TotalVisitors"].between(visitor_range[0], visitor_range[1])]
 
-    filtered = filtered[
-        filtered["TotalVisitors"].between(visitor_range[0], visitor_range[1])
-    ]
-
-# -----------------------------
-# Tabs
-# -----------------------------
-
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Overview",
-    "Activity Performance",
-    "Monthly Recommendations",
+tabs = st.tabs([
+    "Executive Summary",
+    "Activity Scorecard",
+    "Opportunity Matrix",
+    "Monthly & Day Recommendations",
     "Attendance & No-Shows",
+    "Volunteer Analysis",
+    "Geography",
     "Raw Data"
 ])
 
-# -----------------------------
-# Tab 1: Overview
-# -----------------------------
-
-with tab1:
-    st.subheader("Dashboard Overview")
-
-    col1, col2, col3, col4 = st.columns(4)
+# Executive Summary
+with tabs[0]:
+    st.subheader("Executive Summary")
 
     total_activities = len(filtered)
     total_visitors = filtered["TotalVisitors"].sum() if "TotalVisitors" in filtered.columns else 0
+    avg_visitors = filtered["TotalVisitors"].mean() if "TotalVisitors" in filtered.columns else 0
     volunteer_hours = filtered["VolunteerHours"].sum() if "VolunteerHours" in filtered.columns else 0
-    avg_attendance = filtered["AttendanceRate"].mean() if "AttendanceRate" in filtered.columns else np.nan
 
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Activities", f"{total_activities:,}")
     col2.metric("Total Visitors", f"{int(total_visitors):,}")
-    col3.metric("Volunteer Hours", f"{round(volunteer_hours, 1):,}")
-    col4.metric(
-        "Avg Attendance Rate",
-        f"{avg_attendance:.1%}" if pd.notna(avg_attendance) else "N/A"
-    )
+    col3.metric("Avg Visitors / Activity", f"{avg_visitors:.1f}")
+    col4.metric("Volunteer Hours", f"{volunteer_hours:,.1f}")
 
-    st.markdown("### Activity Mix")
-
-    if "ActivityType" in filtered.columns:
-        activity_mix = (
-            filtered.groupby("ActivityType")
-            .agg(
-                Activities=("ActivityType", "count"),
-                TotalVisitors=("TotalVisitors", "sum"),
-                AvgVisitors=("TotalVisitors", "mean"),
-                VolunteerHours=("VolunteerHours", "sum")
-            )
-            .sort_values("TotalVisitors", ascending=False)
-        )
-
-        st.dataframe(activity_mix)
-
-        st.bar_chart(activity_mix["TotalVisitors"])
-
-# -----------------------------
-# Tab 2: Activity Performance
-# -----------------------------
-
-with tab2:
-    st.subheader("Which Activities Perform Best?")
-
-    if "ActivityType" in filtered.columns:
-        performance = (
+    if "ActivityType" in filtered.columns and "TotalVisitors" in filtered.columns:
+        summary = (
             filtered.groupby("ActivityType")
             .agg(
                 ActivityCount=("ActivityType", "count"),
                 TotalVisitors=("TotalVisitors", "sum"),
-                AvgVisitors=("TotalVisitors", "mean"),
-                MedianVisitors=("TotalVisitors", "median"),
-                VolunteerHours=("VolunteerHours", "sum"),
-                AvgAttendanceRate=("AttendanceRate", "mean")
+                AvgVisitors=("TotalVisitors", "mean")
             )
             .reset_index()
         )
 
-        performance["VisitorsPerActivityRank"] = performance["AvgVisitors"].rank(ascending=False)
-        performance["FrequencyRank"] = performance["ActivityCount"].rank(ascending=False)
+        top_volume = summary.sort_values("ActivityCount", ascending=False).iloc[0]
+        top_attendance = summary.sort_values("AvgVisitors", ascending=False).iloc[0]
 
-        performance = performance.sort_values("AvgVisitors", ascending=False)
+        st.markdown("### Key Findings")
+        st.write(f"- **{top_volume['ActivityType']}** is the most frequently offered activity type.")
+        st.write(f"- **{top_attendance['ActivityType']}** has the highest average attendance per activity.")
+        st.write("- Use the Opportunity Matrix tab to identify growth opportunities and possible oversaturation.")
+        st.write("- Use the Monthly & Day Recommendations tab to guide when activities should be scheduled.")
 
-        st.dataframe(performance)
+# Activity Scorecard
+with tabs[1]:
+    st.subheader("Activity Scorecard")
 
-        st.markdown("### Best Performing Activity Types by Average Attendance")
-        st.bar_chart(performance.set_index("ActivityType")["AvgVisitors"])
+    scorecard = (
+        filtered.groupby("ActivityType")
+        .agg(
+            ActivityCount=("ActivityType", "count"),
+            TotalVisitors=("TotalVisitors", "sum"),
+            AvgVisitors=("TotalVisitors", "mean"),
+            MedianVisitors=("TotalVisitors", "median"),
+            VolunteerHours=("VolunteerHours", "sum"),
+            AvgAttendanceRate=("AttendanceRate", "mean"),
+            AvgNoShowRate=("NoShowRate", "mean")
+        )
+        .reset_index()
+    )
 
-        st.markdown("### Recommendation Logic")
+    scorecard["DemandLevel"] = pd.qcut(scorecard["AvgVisitors"].rank(method="first"), 3, labels=["Low", "Medium", "High"])
+    scorecard["SupplyLevel"] = pd.qcut(scorecard["ActivityCount"].rank(method="first"), 3, labels=["Low", "Medium", "High"])
 
-        strong_performers = performance[
-            (performance["AvgVisitors"] >= performance["AvgVisitors"].median()) &
-            (performance["ActivityCount"] <= performance["ActivityCount"].median())
-        ]
+    scorecard["Recommendation"] = np.select(
+        [
+            (scorecard["DemandLevel"] == "High") & (scorecard["SupplyLevel"] == "Low"),
+            (scorecard["DemandLevel"] == "High") & (scorecard["SupplyLevel"] == "High"),
+            (scorecard["DemandLevel"] == "Low") & (scorecard["SupplyLevel"] == "High"),
+        ],
+        [
+            "Expand or test more",
+            "Core program",
+            "Review for oversaturation"
+        ],
+        default="Monitor"
+    )
 
-        saturated = performance[
-            (performance["ActivityCount"] >= performance["ActivityCount"].median()) &
-            (performance["AvgVisitors"] <= performance["AvgVisitors"].median())
-        ]
+    st.dataframe(scorecard.sort_values("AvgVisitors", ascending=False))
+    st.bar_chart(scorecard.set_index("ActivityType")["AvgVisitors"])
 
-        col1, col2 = st.columns(2)
+# Opportunity Matrix
+with tabs[2]:
+    st.subheader("Opportunity Matrix")
 
-        with col1:
-            st.markdown("#### Potential Growth Opportunities")
-            st.caption("Higher attendance but lower frequency.")
-            st.dataframe(strong_performers)
+    matrix = scorecard.copy()
+    matrix["SupplyScore"] = matrix["ActivityCount"] / matrix["ActivityCount"].max()
+    matrix["DemandScore"] = matrix["AvgVisitors"] / matrix["AvgVisitors"].max()
+    matrix["GapScore"] = matrix["DemandScore"] - matrix["SupplyScore"]
 
-        with col2:
-            st.markdown("#### Potentially Saturated Categories")
-            st.caption("Higher frequency but lower average attendance.")
-            st.dataframe(saturated)
+    matrix["Quadrant"] = np.select(
+        [
+            (matrix["DemandScore"] >= matrix["DemandScore"].median()) & (matrix["SupplyScore"] < matrix["SupplyScore"].median()),
+            (matrix["DemandScore"] >= matrix["DemandScore"].median()) & (matrix["SupplyScore"] >= matrix["SupplyScore"].median()),
+            (matrix["DemandScore"] < matrix["DemandScore"].median()) & (matrix["SupplyScore"] >= matrix["SupplyScore"].median()),
+        ],
+        [
+            "Growth Opportunity",
+            "Core Program",
+            "Possible Oversaturation"
+        ],
+        default="Low Priority / Monitor"
+    )
 
-# -----------------------------
-# Tab 3: Monthly Recommendations
-# -----------------------------
+    st.dataframe(matrix.sort_values("GapScore", ascending=False))
 
-with tab3:
-    st.subheader("What Activities Do Best by Month?")
+    st.markdown("### Recommendations")
+    for _, row in matrix.sort_values("GapScore", ascending=False).head(5).iterrows():
+        st.success(
+            f"**{row['ActivityType']}**: {row['Quadrant']}. "
+            f"Avg visitors/activity: {row['AvgVisitors']:.1f}. "
+            f"Activity count: {int(row['ActivityCount'])}."
+        )
 
-    if "Month" in filtered.columns and "ActivityType" in filtered.columns:
+    for _, row in matrix.sort_values("GapScore").head(3).iterrows():
+        st.warning(
+            f"Review **{row['ActivityType']}** before adding more. "
+            f"It may have higher supply relative to demand."
+        )
+
+# Monthly and Day Recommendations
+with tabs[3]:
+    st.subheader("Best Activities by Month and Day")
+
+    if "Month" in filtered.columns:
         monthly = (
             filtered.groupby(["MonthNum", "Month", "ActivityType"])
             .agg(
                 ActivityCount=("ActivityType", "count"),
-                TotalVisitors=("TotalVisitors", "sum"),
                 AvgVisitors=("TotalVisitors", "mean"),
-                AvgAttendanceRate=("AttendanceRate", "mean")
+                TotalVisitors=("TotalVisitors", "sum")
             )
             .reset_index()
+            .sort_values(["MonthNum", "AvgVisitors"], ascending=[True, False])
         )
 
-        monthly = monthly.sort_values(["MonthNum", "AvgVisitors"], ascending=[True, False])
+        best_by_month = monthly.groupby(["MonthNum", "Month"]).head(3)
 
-        st.markdown("### Monthly Activity Performance")
-        st.dataframe(monthly)
-
-        best_by_month = (
-            monthly.sort_values(["MonthNum", "AvgVisitors"], ascending=[True, False])
-            .groupby(["MonthNum", "Month"])
-            .head(3)
-        )
-
-        st.markdown("### Top Recommended Activity Types by Month")
-        st.caption("Based on highest average visitors per activity.")
+        st.markdown("### Top Activity Types by Month")
         st.dataframe(best_by_month)
 
-        selected_month = st.selectbox(
-            "Select a month for recommendations",
-            sorted(monthly["Month"].dropna().unique(), key=lambda x: month_order.index(x))
-        )
+        selected_month = st.selectbox("Choose a month", best_by_month["Month"].dropna().unique())
 
         month_recs = best_by_month[best_by_month["Month"] == selected_month]
 
-        st.markdown(f"### Recommended Activities for {selected_month}")
-
         for _, row in month_recs.iterrows():
-            st.write(
-                f"**{row['ActivityType']}** tends to perform well in {selected_month}, "
-                f"with an average of **{row['AvgVisitors']:.1f} visitors per activity**."
+            st.info(
+                f"In **{selected_month}**, **{row['ActivityType']}** performs well, "
+                f"averaging **{row['AvgVisitors']:.1f} visitors per activity**."
             )
 
-# -----------------------------
-# Tab 4: Attendance & No-Shows
-# -----------------------------
+    if "DayOfWeek" in filtered.columns:
+        day_summary = (
+            filtered.groupby("DayOfWeek")
+            .agg(
+                ActivityCount=("DayOfWeek", "count"),
+                AvgVisitors=("TotalVisitors", "mean"),
+                TotalVisitors=("TotalVisitors", "sum")
+            )
+            .sort_values("AvgVisitors", ascending=False)
+        )
 
-with tab4:
+        st.markdown("### Best Days of Week")
+        st.dataframe(day_summary)
+        st.bar_chart(day_summary["AvgVisitors"])
+
+# Attendance and No Shows
+with tabs[4]:
     st.subheader("Attendance and No-Show Analysis")
 
     if "VisitorsRegistered" in filtered.columns and "VisitorNoShow" in filtered.columns:
-        attendance_summary = (
+        attendance = (
             filtered.groupby("ActivityType")
             .agg(
                 Registered=("VisitorsRegistered", "sum"),
                 NoShows=("VisitorNoShow", "sum"),
                 ActualVisitors=("ActualVisitors", "sum"),
-                AvgAttendanceRate=("AttendanceRate", "mean")
+                AvgAttendanceRate=("AttendanceRate", "mean"),
+                AvgNoShowRate=("NoShowRate", "mean")
             )
             .reset_index()
+            .sort_values("AvgNoShowRate", ascending=False)
         )
 
-        attendance_summary["NoShowRate"] = np.where(
-            attendance_summary["Registered"] > 0,
-            attendance_summary["NoShows"] / attendance_summary["Registered"],
-            np.nan
-        )
+        st.dataframe(attendance)
+        st.bar_chart(attendance.set_index("ActivityType")["AvgNoShowRate"])
 
-        attendance_summary = attendance_summary.sort_values("NoShowRate", ascending=False)
-
-        st.dataframe(attendance_summary)
-
-        st.markdown("### No-Show Rate by Activity Type")
-        st.bar_chart(attendance_summary.set_index("ActivityType")["NoShowRate"])
-
-        st.markdown("### Stakeholder Talking Points")
-
-        high_no_show = attendance_summary.head(5)
-
-        for _, row in high_no_show.iterrows():
-            st.write(
-                f"- **{row['ActivityType']}** has a no-show rate of "
-                f"**{row['NoShowRate']:.1%}**, which may require reminder emails, waitlists, "
-                f"or overbooking strategies."
+        st.markdown("### No-Show Recommendations")
+        for _, row in attendance.head(5).iterrows():
+            st.warning(
+                f"**{row['ActivityType']}** has an average no-show rate of "
+                f"**{row['AvgNoShowRate']:.1%}**. Consider reminder emails, waitlists, or overbooking."
             )
     else:
         st.info("No-show analysis requires VisitorsRegistered and VisitorNoShow columns.")
 
-# -----------------------------
-# Tab 5: Raw Data
-# -----------------------------
+# Volunteer Analysis
+with tabs[5]:
+    st.subheader("Volunteer Effectiveness")
 
-with tab5:
-    st.subheader("Filtered Data")
+    if "VolunteerHours" in filtered.columns:
+        volunteer_summary = (
+            filtered.groupby("ActivityType")
+            .agg(
+                ActivityCount=("ActivityType", "count"),
+                TotalVisitors=("TotalVisitors", "sum"),
+                AvgVisitors=("TotalVisitors", "mean"),
+                VolunteerHours=("VolunteerHours", "sum"),
+                AvgVolunteerHours=("VolunteerHours", "mean")
+            )
+            .reset_index()
+        )
+
+        volunteer_summary["VisitorsPerVolunteerHour"] = np.where(
+            volunteer_summary["VolunteerHours"] > 0,
+            volunteer_summary["TotalVisitors"] / volunteer_summary["VolunteerHours"],
+            np.nan
+        )
+
+        st.dataframe(volunteer_summary.sort_values("VolunteerHours", ascending=False))
+
+        st.markdown("### Volunteer Hours by Activity Type")
+        st.bar_chart(volunteer_summary.set_index("ActivityType")["VolunteerHours"])
+
+# Geography
+with tabs[6]:
+    st.subheader("Geographic Participant Analysis")
+
+    st.caption("This uses public signup data if city, state, or zip fields are available.")
+
+    geo_cols = public.columns.tolist()
+    st.write("Available public signup columns:", geo_cols)
+
+    possible_city = next((c for c in public.columns if c.lower() in ["city", "usercity"]), None)
+    possible_state = next((c for c in public.columns if c.lower() in ["state", "userstate"]), None)
+    possible_zip = next((c for c in public.columns if c.lower() in ["zip", "zipcode", "postalcode"]), None)
+
+    if possible_city:
+        city_summary = public[possible_city].value_counts().head(20)
+        st.markdown("### Top Participant Cities")
+        st.dataframe(city_summary)
+        st.bar_chart(city_summary)
+
+    if possible_state:
+        state_summary = public[possible_state].value_counts().head(20)
+        st.markdown("### Top Participant States")
+        st.dataframe(state_summary)
+
+    if possible_zip:
+        zip_summary = public[possible_zip].value_counts().head(20)
+        st.markdown("### Top Participant Zip Codes")
+        st.dataframe(zip_summary)
+
+    if not any([possible_city, possible_state, possible_zip]):
+        st.info("No city, state, or zip columns detected yet.")
+
+# Raw Data
+with tabs[7]:
+    st.subheader("Filtered Activity Data")
     st.dataframe(filtered)
 
     csv = filtered.to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        label="Download Filtered Data",
+        "Download Filtered Data",
         data=csv,
-        file_name="filtered_irc_activity_data.csv",
+        file_name="filtered_activity_data.csv",
         mime="text/csv"
     )
