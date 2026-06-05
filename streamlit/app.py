@@ -1,6 +1,3 @@
-Yes. Replace your entire `streamlit/app.py` with this version. It uses your **actual column names**:
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -482,4 +479,3 @@ with tabs[7]:
         file_name="filtered_activity_data.csv",
         mime="text/csv"
     )
-```
