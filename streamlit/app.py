@@ -783,91 +783,164 @@ with tabs[5]:
 with tabs[6]:
     st.subheader("Participant Geography")
 
-    st.caption("Uses city, state, and ZIP fields from public signup records.")
+    st.caption(
+        "Uses city, state, and ZIP fields from public signup records to understand where participants are coming from."
+    )
 
-    state_summary = (
-        public_filtered.groupby("state_clean")
+    geo = public_filtered.copy()
+
+    geo = geo.dropna(subset=["zip"])
+    geo["zip"] = geo["zip"].astype(str).str[:5]
+
+    # Classify local vs regional based on ZIP prefix
+    def classify_region(zip_code):
+        if pd.isna(zip_code):
+            return "Unknown"
+
+        zip_code = str(zip_code)
+
+        if zip_code.startswith(("926", "927", "928")):
+            return "Orange County"
+        elif zip_code.startswith(("900", "901", "902", "903", "904", "905", "906", "907", "908", "910", "911", "912", "913", "914", "915", "916", "917", "918")):
+            return "Los Angeles Area"
+        elif zip_code.startswith(("919", "920", "921")):
+            return "San Diego Area"
+        elif zip_code.startswith(("923", "924")):
+            return "San Bernardino Area"
+        elif zip_code.startswith(("925")):
+            return "Riverside Area"
+        elif zip_code.startswith(("930", "931")):
+            return "Ventura / Santa Barbara Area"
+        elif zip_code.startswith(("94", "95")):
+            return "Bay Area / Northern CA"
+        else:
+            return "Other / Out of Area"
+
+    geo["ParticipantRegion"] = geo["zip"].apply(classify_region)
+
+    region_summary = (
+        geo.groupby("ParticipantRegion")
         .agg(
             TotalSignups=("public_spaces_reserved", "sum"),
             UniqueBookings=("booking_id", "nunique"),
+            UniqueZipCodes=("zip", "nunique")
         )
         .reset_index()
         .sort_values("TotalSignups", ascending=False)
     )
 
-    st.markdown("### Participant Signups by State")
+    st.markdown("### Participant Regions")
 
-    if not state_summary.empty:
-        fig = px.bar(
-            state_summary.head(20),
-            x="state_clean",
-            y="TotalSignups",
-            color="state_clean",
-            title="Participant Signups by State",
+    fig = px.bar(
+        region_summary,
+        x="ParticipantRegion",
+        y="TotalSignups",
+        color="ParticipantRegion",
+        title="Participant Signups by Region"
+    )
+
+    fig.update_layout(
+        xaxis_tickangle=-30,
+        height=500,
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True, key="geo_region_summary")
+
+    st.dataframe(region_summary, use_container_width=True)
+
+    st.markdown("### Local vs Out-of-Area Participation")
+
+    geo["LocalCategory"] = np.where(
+        geo["ParticipantRegion"] == "Orange County",
+        "Local Orange County",
+        "Outside Orange County"
+    )
+
+    local_summary = (
+        geo.groupby("LocalCategory")
+        .agg(
+            TotalSignups=("public_spaces_reserved", "sum"),
+            UniqueBookings=("booking_id", "nunique")
         )
-        fig.update_layout(height=500, xaxis_tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True, key="geo_signups_by_state")
-    else:
-        st.info("No state data available for current filters.")
+        .reset_index()
+    )
 
-    col1, col2 = st.columns(2)
+    fig = px.pie(
+        local_summary,
+        names="LocalCategory",
+        values="TotalSignups",
+        title="Local vs Outside Orange County Participation",
+        hole=0.4
+    )
 
-    with col1:
-        st.markdown("### Top Participant Cities")
+    st.plotly_chart(fig, use_container_width=True, key="geo_local_vs_outside")
 
-        city_summary = (
-            public_filtered.groupby(["city", "state_clean"])
-            .agg(
-                TotalSignups=("public_spaces_reserved", "sum"),
-                UniqueBookings=("booking_id", "nunique"),
-            )
-            .reset_index()
-            .sort_values("TotalSignups", ascending=False)
+    st.markdown("### Top Participant Cities")
+
+    city_summary = (
+        geo.groupby(["city", "state_clean", "ParticipantRegion"])
+        .agg(
+            TotalSignups=("public_spaces_reserved", "sum"),
+            UniqueBookings=("booking_id", "nunique"),
+            UniqueZipCodes=("zip", "nunique")
+        )
+        .reset_index()
+        .sort_values("TotalSignups", ascending=False)
+    )
+
+    st.dataframe(city_summary.head(25), use_container_width=True)
+
+    top_cities = city_summary.head(15).copy()
+    top_cities["CityState"] = (
+        top_cities["city"].astype(str) + ", " + top_cities["state_clean"].astype(str)
+    )
+
+    fig = px.bar(
+        top_cities,
+        x="CityState",
+        y="TotalSignups",
+        color="ParticipantRegion",
+        title="Top Participant Cities by Signup Volume"
+    )
+
+    fig.update_layout(
+        xaxis_tickangle=-35,
+        height=550
+    )
+
+    st.plotly_chart(fig, use_container_width=True, key="geo_top_cities_better")
+
+    st.markdown("### Geography-Based Recommendations")
+
+    if not region_summary.empty:
+        top_region = region_summary.iloc[0]
+
+        st.success(
+            f"Most public signups come from **{top_region['ParticipantRegion']}**, "
+            f"with **{int(top_region['TotalSignups']):,} total signup spaces**."
         )
 
-        st.dataframe(city_summary.head(25), use_container_width=True)
+    outside_total = local_summary.loc[
+        local_summary["LocalCategory"] == "Outside Orange County",
+        "TotalSignups"
+    ].sum()
 
-        if not city_summary.empty:
-            city_chart = city_summary.head(15).copy()
-            city_chart["CityState"] = city_chart["city"].astype(str) + ", " + city_chart["state_clean"].astype(str)
+    local_total = local_summary["TotalSignups"].sum()
 
-            fig = px.bar(
-                city_chart,
-                x="CityState",
-                y="TotalSignups",
-                color="state_clean",
-                title="Top Participant Cities",
+    if local_total > 0:
+        outside_share = outside_total / local_total
+
+        if outside_share >= 0.25:
+            st.info(
+                f"About **{outside_share:.1%}** of signups come from outside Orange County. "
+                "This suggests IRC may have regional reach beyond its immediate service area."
             )
-            fig = clean_chart_labels(fig)
-            st.plotly_chart(fig, use_container_width=True, key="geo_top_cities")
-
-    with col2:
-        st.markdown("### Top ZIP Codes")
-
-        zip_summary = (
-            public_filtered.groupby("zip")
-            .agg(
-                TotalSignups=("public_spaces_reserved", "sum"),
-                UniqueBookings=("booking_id", "nunique"),
+        else:
+            st.info(
+                f"Only **{outside_share:.1%}** of signups come from outside Orange County. "
+                "Outreach appears primarily local."
             )
-            .reset_index()
-            .sort_values("TotalSignups", ascending=False)
-        )
-
-        st.dataframe(zip_summary.head(25), use_container_width=True)
-
-        if not zip_summary.empty:
-            fig = px.bar(
-                zip_summary.head(15),
-                x="zip",
-                y="TotalSignups",
-                color="TotalSignups",
-                title="Top ZIP Codes",
-                color_continuous_scale="Teal",
-            )
-            fig.update_layout(height=500, xaxis_tickangle=-35)
-            st.plotly_chart(fig, use_container_width=True, key="geo_top_zips")
-
 # --------------------------------------------------
 # Volunteer Analysis
 # --------------------------------------------------
