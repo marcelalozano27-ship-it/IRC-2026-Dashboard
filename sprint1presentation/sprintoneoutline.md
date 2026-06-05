@@ -6,6 +6,7 @@
 - Fong (Client Liaison)
 - Brandon (Presentation Lead)
 
+**Link to Prototype :** https://ircdashboard.streamlit.app/
 # Slide 1: Project Overview
 
 ## Problem Statement
@@ -181,7 +182,7 @@ Potential Oversaturation = high activity volume + lower attendance
 
 # Slide 15: Team Structure
 
-## Marcela Lozano
+## Marcela 
 Project Lead / Technical Lead
 
 ## Fong
