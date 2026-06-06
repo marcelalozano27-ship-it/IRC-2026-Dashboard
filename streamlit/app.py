@@ -4,7 +4,30 @@ import numpy as np
 import plotly.express as px
 
 st.set_page_config(page_title="IRC Activity Planning Dashboard", layout="wide")
+SHARED_PASSWORD = "lgo2026"
 
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if st.session_state["authenticated"]:
+        return True
+
+    st.title("IRC Activity Planning Dashboard")
+    st.caption("Please enter the shared password to access the dashboard.")
+
+    password = st.text_input("Password", type="password")
+
+    if password == SHARED_PASSWORD:
+        st.session_state["authenticated"] = True
+        st.rerun()
+    elif password:
+        st.error("Incorrect password")
+
+    return False
+
+if not check_password():
+    st.stop()
 st.title("IRC Activity Planning Dashboard")
 st.caption(
     "Decision-support dashboard for attendance trends, activity gaps, recommendations, "
@@ -321,19 +344,16 @@ def clean_chart_labels(fig, tick_angle=-35):
 
 
 scorecard = build_scorecard(filtered, group_col)
-
 # --------------------------------------------------
 # Tabs
 # --------------------------------------------------
 
 tabs = st.tabs(
     [
-        "Executive Summary",
-        "Activity Scorecard",
-        "Opportunity Matrix",
-        "Yearly Trends",
-        "Monthly & Day Recommendations",
-        "Attendance & No-Shows",
+        "Overview",
+        "Question 1: Participation Drivers",
+        "Question 2: Timing & Trends",
+        "Question 3: Growth Opportunities",
         "Geography",
         "Volunteer Analysis",
         "Raw Data",
@@ -341,11 +361,21 @@ tabs = st.tabs(
 )
 
 # --------------------------------------------------
-# Executive Summary
+# Overview
 # --------------------------------------------------
 
 with tabs[0]:
-    st.subheader("Executive Summary")
+    st.subheader("Overview")
+
+    st.markdown("""
+    ### Key Questions This Dashboard Answers
+
+    1. Which programs drive the most participation?
+
+    2. When does participation occur and how does it change over time?
+
+    3. Which programs are growing, declining, or showing the greatest opportunity?
+    """)
 
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -379,70 +409,25 @@ with tabs[0]:
             f"- **{top_saturated['ActivityGroup']}** may be oversupplied relative to attendance demand."
         )
 
-    st.markdown("### Activities by Year")
-
-    yearly = (
-        filtered.groupby("Year")
-        .size()
-        .reset_index(name="ActivityCount")
-        .sort_values("Year")
-    )
-
-    fig = px.bar(
-        yearly,
-        x="Year",
-        y="ActivityCount",
-        color="ActivityCount",
-        title="Activities by Year",
-        color_continuous_scale="Blues",
-    )
-    fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="executive_activities_by_year")
-
-    st.markdown("### Top Activity Groups by Total Visitors")
-
-    top_visitor_group = scorecard.sort_values("TotalVisitors", ascending=False).head(15)
-
-    fig = px.bar(
-        top_visitor_group,
-        x="ActivityGroup",
-        y="TotalVisitors",
-        color="RecommendationCategory",
-        title=f"Top Activity Groups by Total Visitors ({group_col})",
-    )
-    fig = clean_chart_labels(fig)
-    st.plotly_chart(fig, use_container_width=True, key="executive_total_visitors_by_group")
-
     st.info(
-        "Use this dashboard to identify which activities should be expanded, which may be "
-        "oversaturated, which months and days perform best, and where participants are coming from."
+        "Use the tabs above to move through the dashboard based on the three main client questions."
     )
 
 # --------------------------------------------------
-# Activity Scorecard
+# Question 1: Participation Drivers
 # --------------------------------------------------
 
 with tabs[1]:
-    st.subheader("Activity Scorecard")
+    st.subheader("Question 1: Which programs drive the most participation?")
+
+    st.info(
+        "Use this section to identify which activity types attract the highest levels of participation and demand."
+    )
 
     if scorecard.empty:
         st.warning("No data available for current filters.")
     else:
         st.dataframe(scorecard.sort_values("AvgVisitors", ascending=False), use_container_width=True)
-
-        st.markdown("### Top Activity Groups by Average Visitors")
-
-        top_avg = scorecard.sort_values("AvgVisitors", ascending=False).head(15)
-
-        fig = px.bar(
-            top_avg,
-            x="ActivityGroup",
-            y="AvgVisitors",
-            color="RecommendationCategory",
-            title=f"Top Activity Groups by Average Visitors ({group_col})",
-        )
-        fig = clean_chart_labels(fig)
-        st.plotly_chart(fig, use_container_width=True, key="scorecard_avg_visitors")
 
         st.markdown("### Top Activity Groups by Total Visitors")
 
@@ -456,95 +441,32 @@ with tabs[1]:
             title=f"Top Activity Groups by Total Visitors ({group_col})",
         )
         fig = clean_chart_labels(fig)
-        st.plotly_chart(fig, use_container_width=True, key="scorecard_total_visitors")
+        st.plotly_chart(fig, use_container_width=True, key="q1_total_visitors")
 
-        st.markdown("### Recommendation Category Mix")
+        st.markdown("### Top Activity Groups by Average Visitors")
 
-        rec_counts = scorecard["RecommendationCategory"].value_counts().reset_index()
-        rec_counts.columns = ["RecommendationCategory", "Count"]
+        top_avg = scorecard.sort_values("AvgVisitors", ascending=False).head(15)
 
-        fig = px.pie(
-            rec_counts,
-            names="RecommendationCategory",
-            values="Count",
-            title="Recommendation Category Mix",
-            hole=0.35,
+        fig = px.bar(
+            top_avg,
+            x="ActivityGroup",
+            y="AvgVisitors",
+            color="RecommendationCategory",
+            title=f"Top Activity Groups by Average Visitors ({group_col})",
         )
-        fig.update_layout(height=480)
-        st.plotly_chart(fig, use_container_width=True, key="scorecard_recommendation_pie")
+        fig = clean_chart_labels(fig)
+        st.plotly_chart(fig, use_container_width=True, key="q1_avg_visitors")
 
 # --------------------------------------------------
-# Opportunity Matrix
+# Question 2: Timing & Trends
 # --------------------------------------------------
 
 with tabs[2]:
-    st.subheader("Opportunity Matrix")
+    st.subheader("Question 2: When does participation occur and how does it change over time?")
 
-    st.markdown(
-        """
-        This compares **supply** and **demand**.
-
-        - **Supply** = number of activities offered
-        - **Demand** = average visitors per activity
-        - **Growth Opportunity** = high demand but lower supply
-        - **Possible Oversaturation** = high supply but lower demand
-        """
+    st.info(
+        "Use this section to understand yearly, monthly, and day-of-week participation patterns."
     )
-
-    if scorecard.empty:
-        st.warning("No data available for current filters.")
-    else:
-        matrix = scorecard.sort_values("GapScore", ascending=False)
-
-        st.dataframe(matrix, use_container_width=True)
-
-        fig = px.scatter(
-            matrix,
-            x="SupplyScore",
-            y="DemandScore",
-            size="TotalVisitors",
-            color="RecommendationCategory",
-            hover_name="ActivityGroup",
-            title="Opportunity Matrix: Supply vs Demand",
-            size_max=55,
-        )
-        fig.update_layout(height=560)
-        st.plotly_chart(fig, use_container_width=True, key="opportunity_matrix_scatter")
-
-        st.markdown("### Growth Opportunities")
-
-        growth = matrix[matrix["RecommendationCategory"] == "Growth Opportunity"]
-
-        if growth.empty:
-            st.info("No strong growth opportunities detected with current filters.")
-        else:
-            for _, row in growth.head(5).iterrows():
-                st.success(
-                    f"Consider expanding **{row['ActivityGroup']}**. "
-                    f"It averages **{row['AvgVisitors']:.1f} visitors per activity** "
-                    f"across **{int(row['ActivityCount'])} activities**."
-                )
-
-        st.markdown("### Possible Oversaturation")
-
-        saturated = matrix[matrix["RecommendationCategory"] == "Possible Oversaturation"]
-
-        if saturated.empty:
-            st.info("No major oversaturation detected with current filters.")
-        else:
-            for _, row in saturated.head(5).iterrows():
-                st.warning(
-                    f"Review **{row['ActivityGroup']}** before adding more offerings. "
-                    f"It has **{int(row['ActivityCount'])} activities** with "
-                    f"**{row['AvgVisitors']:.1f} average visitors**."
-                )
-
-# --------------------------------------------------
-# Yearly Trends
-# --------------------------------------------------
-
-with tabs[3]:
-    st.subheader("Yearly Trends")
 
     yearly_total = (
         filtered.groupby("Year")
@@ -569,7 +491,7 @@ with tabs[3]:
         color_continuous_scale="Viridis",
     )
     fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="yearly_activity_count")
+    st.plotly_chart(fig, use_container_width=True, key="q2_activity_count_year")
 
     st.markdown("### Total Visitors by Year")
 
@@ -582,7 +504,7 @@ with tabs[3]:
     )
     fig.update_traces(line=dict(width=4))
     fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="yearly_total_visitors")
+    st.plotly_chart(fig, use_container_width=True, key="q2_total_visitors_year")
 
     yearly_group = (
         filtered.groupby(["Year", group_col])
@@ -615,27 +537,9 @@ with tabs[3]:
         title=f"Activity Count by Year and Top {group_col}",
     )
     fig.update_layout(height=520)
-    st.plotly_chart(fig, use_container_width=True, key="yearly_group_activity_count")
+    st.plotly_chart(fig, use_container_width=True, key="q2_group_activity_count_year")
 
-    st.markdown("### Volunteer Hours by Year")
-
-    fig = px.bar(
-        yearly_total,
-        x="Year",
-        y="VolunteerHours",
-        color="VolunteerHours",
-        title="Volunteer Hours by Year",
-        color_continuous_scale="Purples",
-    )
-    fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="yearly_volunteer_hours")
-
-# --------------------------------------------------
-# Monthly and Day Recommendations
-# --------------------------------------------------
-
-with tabs[4]:
-    st.subheader("Monthly & Day Recommendations")
+    st.markdown("### Top Activity Groups by Month")
 
     monthly = (
         filtered.groupby(["MonthNum", "Month", group_col])
@@ -655,7 +559,6 @@ with tabs[4]:
     else:
         best_by_month = monthly.groupby(["MonthNum", "Month"]).head(3)
 
-        st.markdown("### Top Activity Groups by Month")
         st.dataframe(best_by_month, use_container_width=True)
 
         fig = px.bar(
@@ -668,14 +571,16 @@ with tabs[4]:
             category_orders={"Month": month_order},
         )
         fig.update_layout(height=560)
-        st.plotly_chart(fig, use_container_width=True, key="monthly_top_groups")
+        st.plotly_chart(fig, use_container_width=True, key="q2_monthly_top_groups")
 
-        available_months_for_select = [m for m in month_order if m in best_by_month["Month"].unique()]
+        available_months_for_select = [
+            m for m in month_order if m in best_by_month["Month"].unique()
+        ]
 
         selected_month = st.selectbox(
             "Choose a month",
             available_months_for_select,
-            key="month_recommendation_select",
+            key="q2_month_recommendation_select",
         )
 
         month_recs = best_by_month[best_by_month["Month"] == selected_month]
@@ -687,6 +592,8 @@ with tabs[4]:
                 f"**{row['ActivityGroup']}** performs well in **{selected_month}**, "
                 f"averaging **{row['AvgVisitors']:.1f} visitors per activity**."
             )
+
+    st.markdown("### Best Days of Week")
 
     day_summary = (
         filtered.groupby("DayOfWeek")
@@ -701,7 +608,6 @@ with tabs[4]:
         .reset_index()
     )
 
-    st.markdown("### Best Days of Week")
     st.dataframe(day_summary, use_container_width=True)
 
     if not day_summary.empty:
@@ -714,314 +620,85 @@ with tabs[4]:
             category_orders={"DayOfWeek": days_order},
         )
         fig.update_layout(height=450)
-        st.plotly_chart(fig, use_container_width=True, key="day_avg_visitors")
+        st.plotly_chart(fig, use_container_width=True, key="q2_day_avg_visitors")
 
 # --------------------------------------------------
-# Attendance and No-Shows
+# Question 3: Growth Opportunities
 # --------------------------------------------------
 
-with tabs[5]:
-    st.subheader("Attendance and No-Show Analysis")
+with tabs[3]:
+    st.subheader("Question 3: Which programs are growing, declining, or showing opportunity?")
 
-    attendance = (
-        filtered.groupby(group_col)
-        .agg(
-            Registered=("VisitorsRegistered", "sum"),
-            NoShows=("VisitorsNoShow", "sum"),
-            WalkUps=("VisitorsWalkUp", "sum"),
-            ActualVisitors=("ActualVisitors", "sum"),
-            AvgAttendanceRate=("AttendanceRate", "mean"),
-            AvgNoShowRate=("NoShowRate", "mean"),
+    st.markdown(
+        """
+        This section compares **supply** and **demand**.
+
+        - **Supply** = number of activities offered
+        - **Demand** = average visitors per activity
+        - **Growth Opportunity** = high demand but lower supply
+        - **Possible Oversaturation** = high supply but lower demand
+        """
+    )
+
+    if scorecard.empty:
+        st.warning("No data available for current filters.")
+    else:
+        matrix = scorecard.sort_values("GapScore", ascending=False)
+
+        st.dataframe(matrix, use_container_width=True)
+
+        fig = px.scatter(
+            matrix,
+            x="SupplyScore",
+            y="DemandScore",
+            size="TotalVisitors",
+            color="RecommendationCategory",
+            hover_name="ActivityGroup",
+            title="Opportunity Matrix: Supply vs Demand",
+            size_max=55,
         )
-        .reset_index()
-        .rename(columns={group_col: "ActivityGroup"})
-        .sort_values("AvgNoShowRate", ascending=False)
-    )
+        fig.update_layout(height=560)
+        st.plotly_chart(fig, use_container_width=True, key="q3_opportunity_matrix")
 
-    st.dataframe(attendance, use_container_width=True)
+        st.markdown("### Recommendation Category Mix")
 
-    top_noshow = attendance.sort_values("AvgNoShowRate", ascending=False).head(15)
+        rec_counts = scorecard["RecommendationCategory"].value_counts().reset_index()
+        rec_counts.columns = ["RecommendationCategory", "Count"]
 
-    fig = px.bar(
-        top_noshow,
-        x="ActivityGroup",
-        y="AvgNoShowRate",
-        color="ActivityGroup",
-        title=f"Top No-Show Rates by {group_col}",
-    )
-    fig = clean_chart_labels(fig)
-    st.plotly_chart(fig, use_container_width=True, key="attendance_no_show_rate")
+        fig = px.pie(
+            rec_counts,
+            names="RecommendationCategory",
+            values="Count",
+            title="Recommendation Category Mix",
+            hole=0.35,
+        )
+        fig.update_layout(height=480)
+        st.plotly_chart(fig, use_container_width=True, key="q3_recommendation_pie")
 
-    st.markdown("### Attendance Rate by Activity Group")
+        st.markdown("### Growth Opportunities")
 
-    top_attendance = attendance.sort_values("AvgAttendanceRate", ascending=False).head(15)
+        growth = matrix[matrix["RecommendationCategory"] == "Growth Opportunity"]
 
-    fig = px.bar(
-        top_attendance,
-        x="ActivityGroup",
-        y="AvgAttendanceRate",
-        color="ActivityGroup",
-        title=f"Top Attendance Rates by {group_col}",
-    )
-    fig = clean_chart_labels(fig)
-    st.plotly_chart(fig, use_container_width=True, key="attendance_rate_by_group")
-
-    st.markdown("### No-Show Recommendations")
-
-    for _, row in top_noshow.head(5).iterrows():
-        if pd.notna(row["AvgNoShowRate"]):
-            st.warning(
-                f"**{row['ActivityGroup']}** has an average no-show rate of "
-                f"**{row['AvgNoShowRate']:.1%}**. Consider reminders, waitlists, "
-                f"or adjusted overbooking assumptions."
-            )
-
-# --------------------------------------------------
-# Geography
-# --------------------------------------------------
-
-with tabs[6]:
-    st.subheader("Participant Geography")
-
-    st.caption(
-        "Uses city, state, and ZIP fields from public signup records to understand where participants are coming from."
-    )
-
-    geo = public_filtered.copy()
-
-    geo = geo.dropna(subset=["zip"])
-    geo["zip"] = geo["zip"].astype(str).str[:5]
-
-    # Classify local vs regional based on ZIP prefix
-    def classify_region(zip_code):
-        if pd.isna(zip_code):
-            return "Unknown"
-
-        zip_code = str(zip_code)
-
-        if zip_code.startswith(("926", "927", "928")):
-            return "Orange County"
-        elif zip_code.startswith(("900", "901", "902", "903", "904", "905", "906", "907", "908", "910", "911", "912", "913", "914", "915", "916", "917", "918")):
-            return "Los Angeles Area"
-        elif zip_code.startswith(("919", "920", "921")):
-            return "San Diego Area"
-        elif zip_code.startswith(("923", "924")):
-            return "San Bernardino Area"
-        elif zip_code.startswith(("925")):
-            return "Riverside Area"
-        elif zip_code.startswith(("930", "931")):
-            return "Ventura / Santa Barbara Area"
-        elif zip_code.startswith(("94", "95")):
-            return "Bay Area / Northern CA"
+        if growth.empty:
+            st.info("No strong growth opportunities detected with current filters.")
         else:
-            return "Other / Out of Area"
+            for _, row in growth.head(5).iterrows():
+                st.success(
+                    f"Consider expanding **{row['ActivityGroup']}**. "
+                    f"It averages **{row['AvgVisitors']:.1f} visitors per activity** "
+                    f"across **{int(row['ActivityCount'])} activities**."
+                )
 
-    geo["ParticipantRegion"] = geo["zip"].apply(classify_region)
+        st.markdown("### Possible Oversaturation")
 
-    region_summary = (
-        geo.groupby("ParticipantRegion")
-        .agg(
-            TotalSignups=("public_spaces_reserved", "sum"),
-            UniqueBookings=("booking_id", "nunique"),
-            UniqueZipCodes=("zip", "nunique")
-        )
-        .reset_index()
-        .sort_values("TotalSignups", ascending=False)
-    )
+        saturated = matrix[matrix["RecommendationCategory"] == "Possible Oversaturation"]
 
-    st.markdown("### Participant Regions")
-
-    fig = px.bar(
-        region_summary,
-        x="ParticipantRegion",
-        y="TotalSignups",
-        color="ParticipantRegion",
-        title="Participant Signups by Region"
-    )
-
-    fig.update_layout(
-        xaxis_tickangle=-30,
-        height=500,
-        showlegend=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True, key="geo_region_summary")
-
-    st.dataframe(region_summary, use_container_width=True)
-
-    st.markdown("### Local vs Out-of-Area Participation")
-
-    geo["LocalCategory"] = np.where(
-        geo["ParticipantRegion"] == "Orange County",
-        "Local Orange County",
-        "Outside Orange County"
-    )
-
-    local_summary = (
-        geo.groupby("LocalCategory")
-        .agg(
-            TotalSignups=("public_spaces_reserved", "sum"),
-            UniqueBookings=("booking_id", "nunique")
-        )
-        .reset_index()
-    )
-
-    fig = px.pie(
-        local_summary,
-        names="LocalCategory",
-        values="TotalSignups",
-        title="Local vs Outside Orange County Participation",
-        hole=0.4
-    )
-
-    st.plotly_chart(fig, use_container_width=True, key="geo_local_vs_outside")
-
-    st.markdown("### Top Participant Cities")
-
-    city_summary = (
-        geo.groupby(["city", "state_clean", "ParticipantRegion"])
-        .agg(
-            TotalSignups=("public_spaces_reserved", "sum"),
-            UniqueBookings=("booking_id", "nunique"),
-            UniqueZipCodes=("zip", "nunique")
-        )
-        .reset_index()
-        .sort_values("TotalSignups", ascending=False)
-    )
-
-    st.dataframe(city_summary.head(25), use_container_width=True)
-
-    top_cities = city_summary.head(15).copy()
-    top_cities["CityState"] = (
-        top_cities["city"].astype(str) + ", " + top_cities["state_clean"].astype(str)
-    )
-
-    fig = px.bar(
-        top_cities,
-        x="CityState",
-        y="TotalSignups",
-        color="ParticipantRegion",
-        title="Top Participant Cities by Signup Volume"
-    )
-
-    fig.update_layout(
-        xaxis_tickangle=-35,
-        height=550
-    )
-
-    st.plotly_chart(fig, use_container_width=True, key="geo_top_cities_better")
-
-    st.markdown("### Geography-Based Recommendations")
-
-    if not region_summary.empty:
-        top_region = region_summary.iloc[0]
-
-        st.success(
-            f"Most public signups come from **{top_region['ParticipantRegion']}**, "
-            f"with **{int(top_region['TotalSignups']):,} total signup spaces**."
-        )
-
-    outside_total = local_summary.loc[
-        local_summary["LocalCategory"] == "Outside Orange County",
-        "TotalSignups"
-    ].sum()
-
-    local_total = local_summary["TotalSignups"].sum()
-
-    if local_total > 0:
-        outside_share = outside_total / local_total
-
-        if outside_share >= 0.25:
-            st.info(
-                f"About **{outside_share:.1%}** of signups come from outside Orange County. "
-                "This suggests IRC may have regional reach beyond its immediate service area."
-            )
+        if saturated.empty:
+            st.info("No major oversaturation detected with current filters.")
         else:
-            st.info(
-                f"Only **{outside_share:.1%}** of signups come from outside Orange County. "
-                "Outreach appears primarily local."
-            )
-# --------------------------------------------------
-# Volunteer Analysis
-# --------------------------------------------------
-
-with tabs[7]:
-    st.subheader("Volunteer Analysis")
-
-    volunteer_summary = (
-        filtered.groupby(group_col)
-        .agg(
-            ActivityCount=(group_col, "count"),
-            Volunteers=("Volunteers", "sum"),
-            VolunteerHours=("VolunteerHours", "sum"),
-            TotalVisitors=("TotalVisitors", "sum"),
-            AvgVisitors=("TotalVisitors", "mean"),
-        )
-        .reset_index()
-        .rename(columns={group_col: "ActivityGroup"})
-    )
-
-    volunteer_summary["VisitorsPerVolunteerHour"] = np.where(
-        volunteer_summary["VolunteerHours"] > 0,
-        volunteer_summary["TotalVisitors"] / volunteer_summary["VolunteerHours"],
-        np.nan,
-    )
-
-    st.dataframe(
-        volunteer_summary.sort_values("VolunteerHours", ascending=False),
-        use_container_width=True,
-    )
-
-    top_volunteer = volunteer_summary.sort_values("VolunteerHours", ascending=False).head(15)
-
-    fig = px.bar(
-        top_volunteer,
-        x="ActivityGroup",
-        y="VolunteerHours",
-        color="ActivityGroup",
-        title=f"Volunteer Hours by {group_col}",
-    )
-    fig = clean_chart_labels(fig)
-    st.plotly_chart(fig, use_container_width=True, key="volunteer_hours_by_group")
-
-    top_efficiency = (
-        volunteer_summary.dropna(subset=["VisitorsPerVolunteerHour"])
-        .sort_values("VisitorsPerVolunteerHour", ascending=False)
-        .head(15)
-    )
-
-    st.markdown("### Visitors per Volunteer Hour")
-
-    if not top_efficiency.empty:
-        fig = px.bar(
-            top_efficiency,
-            x="ActivityGroup",
-            y="VisitorsPerVolunteerHour",
-            color="ActivityGroup",
-            title="Visitors per Volunteer Hour",
-        )
-        fig = clean_chart_labels(fig)
-        st.plotly_chart(fig, use_container_width=True, key="volunteer_efficiency")
-
-# --------------------------------------------------
-# Raw Data
-# --------------------------------------------------
-
-with tabs[8]:
-    st.subheader("Filtered Activity Data")
-    st.dataframe(filtered, use_container_width=True)
-
-    st.subheader("Filtered Public Signup Data")
-    st.dataframe(public_filtered, use_container_width=True)
-
-    st.subheader("Volunteer Signup Data")
-    st.dataframe(volunteers, use_container_width=True)
-
-    csv = filtered.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        "Download Filtered Activity Data",
-        data=csv,
-        file_name="filtered_activity_data.csv",
-        mime="text/csv",
-    )
+            for _, row in saturated.head(5).iterrows():
+                st.warning(
+                    f"Review **{row['ActivityGroup']}** before adding more offerings. "
+                    f"It has **{int(row['ActivityCount'])} activities** with "
+                    f"**{row['AvgVisitors']:.1f} average visitors**."
+                )
