@@ -558,13 +558,17 @@ with tabs[2]:
 # --------------------------------------------------
 
 with tabs[3]:
-top_growth = scorecard.sort_values("GapScore", ascending=False).iloc[0]
 
-show_question_header(
-    "Question 3: Which programs are growing, declining, or showing opportunity?",
-    "Use this section to compare supply and demand and identify where IRC may want to expand, monitor, or reassess programming.",
-    f"{top_growth['ActivityGroup']} shows the strongest growth opportunity based on demand relative to supply."
-)
+    top_growth = scorecard.sort_values(
+        "GapScore",
+        ascending=False
+    ).iloc[0]
+
+    show_question_header(
+        "Question 3: Which programs are growing, declining, or showing opportunity?",
+        "Use this section to compare supply and demand and identify where IRC may want to expand, monitor, or reassess programming.",
+        f"{top_growth['ActivityGroup']} shows the strongest growth opportunity based on demand relative to supply."
+    )
     if scorecard.empty:
         st.warning("No data available for current filters.")
     else:
