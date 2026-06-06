@@ -435,23 +435,36 @@ with tabs[0]:
 # --------------------------------------------------
 # Question 1: Participation Drivers
 # --------------------------------------------------
-
 with tabs[1]:
-   top_total = scorecard.sort_values("TotalVisitors", ascending=False).iloc[0]
 
-show_question_header(
-    "Question 1: Which programs drive the most participation?",
-    "Use this section to identify which activity types attract the highest levels of participation and demand.",
-    f"{top_total['ActivityGroup']} has the highest total participation with {int(top_total['TotalVisitors']):,} visitors."
-)
     if scorecard.empty:
         st.warning("No data available for current filters.")
+
     else:
-        st.dataframe(scorecard.sort_values("AvgVisitors", ascending=False), use_container_width=True)
+
+        top_total_insight = (
+            scorecard.sort_values("TotalVisitors", ascending=False)
+            .iloc[0]
+        )
+
+        show_question_header(
+            "Question 1: Which programs drive the most participation?",
+            "Use this section to identify which activity types attract the highest levels of participation and demand.",
+            f"{top_total_insight['ActivityGroup']} has the highest total participation with "
+            f"{int(top_total_insight['TotalVisitors']):,} visitors."
+        )
+
+        st.dataframe(
+            scorecard.sort_values("AvgVisitors", ascending=False),
+            use_container_width=True
+        )
 
         st.markdown("### Top Activity Groups by Total Visitors")
 
-        top_total = scorecard.sort_values("TotalVisitors", ascending=False).head(15)
+        top_total = (
+            scorecard.sort_values("TotalVisitors", ascending=False)
+            .head(15)
+        )
 
         fig = px.bar(
             top_total,
@@ -460,12 +473,21 @@ show_question_header(
             color="RecommendationCategory",
             title=f"Top Activity Groups by Total Visitors ({group_col})",
         )
+
         fig = clean_chart_labels(fig)
-        st.plotly_chart(fig, use_container_width=True, key="q1_total_visitors")
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key="q1_total_visitors"
+        )
 
         st.markdown("### Top Activity Groups by Average Visitors")
 
-        top_avg = scorecard.sort_values("AvgVisitors", ascending=False).head(15)
+        top_avg = (
+            scorecard.sort_values("AvgVisitors", ascending=False)
+            .head(15)
+        )
 
         fig = px.bar(
             top_avg,
@@ -474,8 +496,14 @@ show_question_header(
             color="RecommendationCategory",
             title=f"Top Activity Groups by Average Visitors ({group_col})",
         )
+
         fig = clean_chart_labels(fig)
-        st.plotly_chart(fig, use_container_width=True, key="q1_avg_visitors")
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key="q1_avg_visitors"
+        )
 
 # --------------------------------------------------
 # Question 2: Timing & Trends
