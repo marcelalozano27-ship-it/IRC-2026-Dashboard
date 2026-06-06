@@ -344,6 +344,12 @@ def clean_chart_labels(fig, tick_angle=-35):
 
 
 scorecard = build_scorecard(filtered, group_col)
+def show_question_header(question, purpose, insight_text=None):
+    st.markdown(f"## {question}")
+    st.info(purpose)
+
+    if insight_text:
+        st.success(f"**Key Insight:** {insight_text}")
 # --------------------------------------------------
 # Tabs
 # --------------------------------------------------
@@ -351,14 +357,15 @@ scorecard = build_scorecard(filtered, group_col)
 tabs = st.tabs(
     [
         "Overview",
-        "Question 1: Participation Drivers",
-        "Question 2: Timing & Trends",
-        "Question 3: Growth Opportunities",
-        "Geography",
-        "Volunteer Analysis",
-        "Raw Data",
+        "Participation Drivers",
+        "Timing & Trends",
+        "Growth Opportunities",
     ]
 )
+
+# --------------------------------------------------
+# Overview
+# --------------------------------------------------
 
 # --------------------------------------------------
 # Overview
@@ -368,49 +375,61 @@ with tabs[0]:
     st.subheader("Overview")
 
     st.markdown("""
-    ### Key Questions This Dashboard Answers
+    This dashboard is organized around three client decision questions:
 
-    1. Which programs drive the most participation?
-
-    2. When does participation occur and how does it change over time?
-
-    3. Which programs are growing, declining, or showing the greatest opportunity?
+    1. **Which programs drive the most participation?**
+    2. **When does participation occur and how does it change over time?**
+    3. **Which programs are growing, declining, or showing opportunity?**
     """)
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Activities", f"{len(filtered):,}")
-    col2.metric("Total Visitors", f"{int(filtered['TotalVisitors'].sum()):,}")
-    col3.metric("Avg Visitors / Activity", f"{filtered['TotalVisitors'].mean():.1f}")
-    col4.metric("No-Show Rate", f"{filtered['NoShowRate'].mean():.1%}")
-    col5.metric("Volunteer Hours", f"{filtered['VolunteerHours'].sum():,.1f}")
+    total_activities = len(filtered)
+    total_visitors = int(filtered["TotalVisitors"].sum())
+    avg_visitors = filtered["TotalVisitors"].mean()
+    volunteer_hours = filtered["VolunteerHours"].sum()
 
-    st.markdown("### Key Findings")
+    col1.metric("Activities", f"{total_activities:,}")
+    col2.metric("Total Visitors", f"{total_visitors:,}")
+    col3.metric("Avg Visitors / Activity", f"{avg_visitors:.1f}")
+    col4.metric("Volunteer Hours", f"{volunteer_hours:,.1f}")
+
+    st.markdown("### Key Insights")
 
     if not scorecard.empty:
-        top_frequency = scorecard.sort_values("ActivityCount", ascending=False).iloc[0]
-        top_attendance = scorecard.sort_values("AvgVisitors", ascending=False).iloc[0]
-        top_gap = scorecard.sort_values("GapScore", ascending=False).iloc[0]
-        top_saturated = scorecard.sort_values("GapScore").iloc[0]
+        top_total = scorecard.sort_values("TotalVisitors", ascending=False).iloc[0]
+        top_avg = scorecard.sort_values("AvgVisitors", ascending=False).iloc[0]
+        top_growth = scorecard.sort_values("GapScore", ascending=False).iloc[0]
 
-        st.write(
-            f"- **{top_frequency['ActivityGroup']}** is offered most often with "
-            f"**{int(top_frequency['ActivityCount'])} activities**."
-        )
-        st.write(
-            f"- **{top_attendance['ActivityGroup']}** has the highest average attendance with "
-            f"**{top_attendance['AvgVisitors']:.1f} visitors per activity**."
-        )
-        st.write(
-            f"- **{top_gap['ActivityGroup']}** appears to be the strongest growth opportunity "
-            f"based on demand relative to supply."
-        )
-        st.write(
-            f"- **{top_saturated['ActivityGroup']}** may be oversupplied relative to attendance demand."
-        )
+        insight_col1, insight_col2, insight_col3 = st.columns(3)
 
-    st.info(
-        "Use the tabs above to move through the dashboard based on the three main client questions."
+        with insight_col1:
+            st.success(
+                f"**Highest total participation:**\n\n"
+                f"{top_total['ActivityGroup']} has the most total visitors "
+                f"with **{int(top_total['TotalVisitors']):,} visitors**."
+            )
+
+        with insight_col2:
+            st.info(
+                f"**Highest average attendance:**\n\n"
+                f"{top_avg['ActivityGroup']} averages "
+                f"**{top_avg['AvgVisitors']:.1f} visitors per activity**."
+            )
+
+        with insight_col3:
+            st.warning(
+                f"**Potential growth opportunity:**\n\n"
+                f"{top_growth['ActivityGroup']} shows the strongest demand gap "
+                f"based on current supply and attendance."
+            )
+
+    st.markdown("### Dashboard Flow")
+
+    st.write(
+        "Start with **Participation Drivers** to understand which programs are most used, "
+        "then move to **Timing & Trends** to understand seasonality, and finish with "
+        "**Growth Opportunities** to identify where IRC may want to expand or reassess programming."
     )
 
 # --------------------------------------------------
@@ -418,12 +437,13 @@ with tabs[0]:
 # --------------------------------------------------
 
 with tabs[1]:
-    st.subheader("Question 1: Which programs drive the most participation?")
+   top_total = scorecard.sort_values("TotalVisitors", ascending=False).iloc[0]
 
-    st.info(
-        "Use this section to identify which activity types attract the highest levels of participation and demand."
-    )
-
+show_question_header(
+    "Question 1: Which programs drive the most participation?",
+    "Use this section to identify which activity types attract the highest levels of participation and demand.",
+    f"{top_total['ActivityGroup']} has the highest total participation with {int(top_total['TotalVisitors']):,} visitors."
+)
     if scorecard.empty:
         st.warning("No data available for current filters.")
     else:
@@ -462,11 +482,6 @@ with tabs[1]:
 # --------------------------------------------------
 
 with tabs[2]:
-    st.subheader("Question 2: When does participation occur and how does it change over time?")
-
-    st.info(
-        "Use this section to understand yearly, monthly, and day-of-week participation patterns."
-    )
 
     yearly_total = (
         filtered.groupby("Year")
@@ -480,6 +495,18 @@ with tabs[2]:
         .sort_values("Year")
     )
 
+    best_year = yearly_total.sort_values(
+        "TotalVisitors",
+        ascending=False
+    ).iloc[0]
+
+    show_question_header(
+        "Question 2: When does participation occur and how does it change over time?",
+        "Use this section to understand yearly, monthly, and day-of-week participation patterns.",
+        f"{int(best_year['Year'])} had the highest participation with "
+        f"{int(best_year['TotalVisitors']):,} visitors."
+    )
+
     st.markdown("### Activity Count by Year")
 
     fig = px.bar(
@@ -490,156 +517,26 @@ with tabs[2]:
         title="Activity Count by Year",
         color_continuous_scale="Viridis",
     )
+
     fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="q2_activity_count_year")
 
-    st.markdown("### Total Visitors by Year")
-
-    fig = px.line(
-        yearly_total,
-        x="Year",
-        y="TotalVisitors",
-        markers=True,
-        title="Total Visitors by Year",
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key="q2_activity_count_year"
     )
-    fig.update_traces(line=dict(width=4))
-    fig.update_layout(height=450)
-    st.plotly_chart(fig, use_container_width=True, key="q2_total_visitors_year")
-
-    yearly_group = (
-        filtered.groupby(["Year", group_col])
-        .agg(
-            ActivityCount=(group_col, "count"),
-            TotalVisitors=("TotalVisitors", "sum"),
-            AvgVisitors=("TotalVisitors", "mean"),
-            VolunteerHours=("VolunteerHours", "sum"),
-        )
-        .reset_index()
-        .rename(columns={group_col: "ActivityGroup"})
-    )
-
-    top_groups = (
-        scorecard.sort_values("TotalVisitors", ascending=False)
-        .head(8)["ActivityGroup"]
-        .tolist()
-    )
-
-    yearly_group_top = yearly_group[yearly_group["ActivityGroup"].isin(top_groups)]
-
-    st.markdown("### Activity Count by Year and Top Activity Groups")
-
-    fig = px.line(
-        yearly_group_top,
-        x="Year",
-        y="ActivityCount",
-        color="ActivityGroup",
-        markers=True,
-        title=f"Activity Count by Year and Top {group_col}",
-    )
-    fig.update_layout(height=520)
-    st.plotly_chart(fig, use_container_width=True, key="q2_group_activity_count_year")
-
-    st.markdown("### Top Activity Groups by Month")
-
-    monthly = (
-        filtered.groupby(["MonthNum", "Month", group_col])
-        .agg(
-            ActivityCount=(group_col, "count"),
-            AvgVisitors=("TotalVisitors", "mean"),
-            TotalVisitors=("TotalVisitors", "sum"),
-            AvgNoShowRate=("NoShowRate", "mean"),
-        )
-        .reset_index()
-        .rename(columns={group_col: "ActivityGroup"})
-        .sort_values(["MonthNum", "AvgVisitors"], ascending=[True, False])
-    )
-
-    if monthly.empty:
-        st.warning("No monthly data available for current filters.")
-    else:
-        best_by_month = monthly.groupby(["MonthNum", "Month"]).head(3)
-
-        st.dataframe(best_by_month, use_container_width=True)
-
-        fig = px.bar(
-            best_by_month,
-            x="Month",
-            y="AvgVisitors",
-            color="ActivityGroup",
-            barmode="group",
-            title=f"Top {group_col} by Month",
-            category_orders={"Month": month_order},
-        )
-        fig.update_layout(height=560)
-        st.plotly_chart(fig, use_container_width=True, key="q2_monthly_top_groups")
-
-        available_months_for_select = [
-            m for m in month_order if m in best_by_month["Month"].unique()
-        ]
-
-        selected_month = st.selectbox(
-            "Choose a month",
-            available_months_for_select,
-            key="q2_month_recommendation_select",
-        )
-
-        month_recs = best_by_month[best_by_month["Month"] == selected_month]
-
-        st.markdown(f"### Recommendations for {selected_month}")
-
-        for _, row in month_recs.iterrows():
-            st.info(
-                f"**{row['ActivityGroup']}** performs well in **{selected_month}**, "
-                f"averaging **{row['AvgVisitors']:.1f} visitors per activity**."
-            )
-
-    st.markdown("### Best Days of Week")
-
-    day_summary = (
-        filtered.groupby("DayOfWeek")
-        .agg(
-            ActivityCount=("DayOfWeek", "count"),
-            AvgVisitors=("TotalVisitors", "mean"),
-            TotalVisitors=("TotalVisitors", "sum"),
-            AvgNoShowRate=("NoShowRate", "mean"),
-        )
-        .reindex(days_order)
-        .dropna(how="all")
-        .reset_index()
-    )
-
-    st.dataframe(day_summary, use_container_width=True)
-
-    if not day_summary.empty:
-        fig = px.bar(
-            day_summary,
-            x="DayOfWeek",
-            y="AvgVisitors",
-            color="DayOfWeek",
-            title="Average Visitors by Day of Week",
-            category_orders={"DayOfWeek": days_order},
-        )
-        fig.update_layout(height=450)
-        st.plotly_chart(fig, use_container_width=True, key="q2_day_avg_visitors")
-
 # --------------------------------------------------
 # Question 3: Growth Opportunities
 # --------------------------------------------------
 
 with tabs[3]:
-    st.subheader("Question 3: Which programs are growing, declining, or showing opportunity?")
+top_growth = scorecard.sort_values("GapScore", ascending=False).iloc[0]
 
-    st.markdown(
-        """
-        This section compares **supply** and **demand**.
-
-        - **Supply** = number of activities offered
-        - **Demand** = average visitors per activity
-        - **Growth Opportunity** = high demand but lower supply
-        - **Possible Oversaturation** = high supply but lower demand
-        """
-    )
-
+show_question_header(
+    "Question 3: Which programs are growing, declining, or showing opportunity?",
+    "Use this section to compare supply and demand and identify where IRC may want to expand, monitor, or reassess programming.",
+    f"{top_growth['ActivityGroup']} shows the strongest growth opportunity based on demand relative to supply."
+)
     if scorecard.empty:
         st.warning("No data available for current filters.")
     else:
