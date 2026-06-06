@@ -167,23 +167,30 @@ selected_types = st.sidebar.multiselect(
 filtered = filtered[filtered["ActivityType"].isin(selected_types)]
 
 subtypes = sorted(filtered["ActivitySubType"].dropna().unique())
-selected_subtypes = st.sidebar.multiselect(
-    "Activity Subtype",
-    subtypes,
-    default=subtypes,
-)
 
-filtered = filtered[filtered["ActivitySubType"].isin(selected_subtypes)]
+if len(subtypes) > 0:
+    selected_subtypes = st.sidebar.multiselect(
+        "Activity Subtype",
+        subtypes,
+        default=subtypes,
+    )
+
+    filtered = filtered[filtered["ActivitySubType"].isin(selected_subtypes)]
+else:
+    st.sidebar.info("No activity subtypes available for selected activity types.")
 
 years = sorted(filtered["Year"].dropna().astype(int).unique())
-selected_years = st.sidebar.multiselect(
-    "Year",
-    years,
-    default=years,
-)
 
-filtered = filtered[filtered["Year"].isin(selected_years)]
+if len(years) > 0:
+    selected_years = st.sidebar.multiselect(
+        "Year",
+        years,
+        default=years,
+    )
 
+    filtered = filtered[filtered["Year"].isin(selected_years)]
+else:
+    st.sidebar.info("No years available for current filters.")
 month_order = [
     "January",
     "February",
