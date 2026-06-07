@@ -266,28 +266,13 @@ days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 # --------------------------------------------------
 
 st.sidebar.header("Filters")
-st.sidebar.caption("Use these controls to narrow the analysis shown across all tabs.")
+st.sidebar.caption("Keep filters broad so the dashboard stays focused on planning decisions.")
 
-group_options = [col for col in ["ActivitySubType", "ActivityType"] if col in activities.columns]
-group_col = st.sidebar.selectbox("Analyze activities by", group_options, index=0)
+# Use ActivitySubType as the default planning level because it is specific enough
+# to be useful without becoming as granular as individual activity names.
+group_col = "ActivitySubType" if "ActivitySubType" in activities.columns else "ActivityType"
 
 filtered = activities.copy()
-
-activity_types = sorted(filtered["ActivityType"].dropna().unique())
-selected_types = st.sidebar.multiselect(
-    "Activity Type",
-    activity_types,
-    default=activity_types,
-)
-filtered = filtered[filtered["ActivityType"].isin(selected_types)]
-
-subtypes = sorted(filtered["ActivitySubType"].dropna().unique())
-selected_subtypes = st.sidebar.multiselect(
-    "Activity Subtype",
-    subtypes,
-    default=subtypes,
-)
-filtered = filtered[filtered["ActivitySubType"].isin(selected_subtypes)]
 
 years = sorted(filtered["Year"].dropna().astype(int).unique())
 selected_years = st.sidebar.multiselect("Year", years, default=years)
@@ -327,18 +312,9 @@ if children_filter == "Yes":
 elif children_filter == "No":
     filtered = filtered[filtered["VisitorsChildren"] == 0]
 
-min_visitors = int(activities["TotalVisitors"].min())
-max_visitors = int(activities["TotalVisitors"].max())
-if min_visitors < max_visitors:
-    visitor_range = st.sidebar.slider(
-        "Total Visitors Range",
-        min_value=min_visitors,
-        max_value=max_visitors,
-        value=(min_visitors, max_visitors),
-    )
-    filtered = filtered[filtered["TotalVisitors"].between(visitor_range[0], visitor_range[1])]
-
+# Public signup data matched to filtered activities
 public_filtered = public[public["ActivityID"].isin(filtered["ActivityID"])].copy()
+
 states = sorted(public_filtered["state_clean"].dropna().unique())
 if states:
     selected_states = st.sidebar.multiselect(
@@ -349,11 +325,20 @@ if states:
     public_filtered = public_filtered[public_filtered["state_clean"].isin(selected_states)]
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### Dashboard Focus")
+st.sidebar.markdown(
+    f"""
+    Analysis is currently shown at the **{group_col}** level.
+
+    This keeps the prototype focused on program planning instead of making users choose between too many detailed filters.
+    """
+)
+
 st.sidebar.markdown("### How to use this dashboard")
 st.sidebar.markdown(
     """
     1. Start with the **Overview** tab.
-    2. Use **Participation Drivers** to find high-performing programs.
+    2. Use **Participation Drivers** to identify high-performing programs.
     3. Use **Timing & Trends** to understand seasonality.
     4. Use **Growth Opportunities** to compare supply and demand.
     """
@@ -444,9 +429,7 @@ st.caption(
 st.markdown(
     """
     IRC has collected over a decade of activity, participant, and volunteer data through LetsGoOutside.org. 
-    This dashboard is designed as a **decision-support tool**, not simply a reporting tool. Because the final 
-    dashboard requirements are still being shaped, this prototype helps define the key planning questions, 
-    metrics, and recommendation framework that can guide future programming decisions.
+    This dashboard is designed as a **decision-support tool**, not simply a reporting tool. Because IRC is still defining how historical data should support planning decisions, this prototype focuses on identifying meaningful questions, metrics, and recommendation frameworks that can guide future programming decisions.
     """
 )
 
@@ -465,7 +448,6 @@ tabs = st.tabs(
         "Participation Drivers",
         "Timing & Trends",
         "Growth Opportunities",
-        "Data Quality",
     ]
 )
 
@@ -544,6 +526,36 @@ with tabs[0]:
 
     st.caption(
         "Sprint 1 Prototype: recommendation logic and KPI definitions will be refined with IRC feedback in future sprints."
+    )
+
+    st.markdown("---")
+    st.subheader("Sprint 1 Assumptions & Next Steps")
+    st.markdown(
+        """
+        This prototype is intended to establish the analytical direction of the project and gather feedback from IRC before final dashboard development.
+
+        ### Current Assumptions
+
+        * Program success can be evaluated using participation, attendance behavior, and activity supply.
+        * Activity subtype may provide more useful planning insights than broad activity categories.
+        * High participation combined with low activity supply may indicate opportunities for expansion.
+        * High activity supply combined with lower participation may indicate areas that should be reviewed before additional investment.
+
+        ### Questions We Are Working to Answer
+
+        * How should program success ultimately be defined?
+        * Which KPIs are most valuable for activity planning?
+        * How should volunteer participation influence recommendations?
+        * Which activity characteristics are most predictive of future demand?
+
+        ### Planned Sprint 2 Enhancements
+
+        * Refine recommendation logic using stakeholder feedback.
+        * Expand analysis across the complete historical dataset.
+        * Add geographic participation analysis.
+        * Improve activity subtype recommendations.
+        * Enhance decision-support and planning features.
+        """
     )
 
 
@@ -895,49 +907,6 @@ with tabs[3]:
             use_container_width=True,
             hide_index=True,
         )
-
-
-# --------------------------------------------------
-# Data Quality
-# --------------------------------------------------
-
-with tabs[4]:
-    st.subheader("Data Quality and Sprint 1 Assumptions")
-
-    st.markdown(
-        """
-        This tab is included to make the prototype transparent. The dashboard is currently a Sprint 1 analytical prototype, so the purpose is to show the direction of the analysis while identifying areas that need validation with IRC.
-        """
-    )
-
-    q1, q2, q3, q4 = st.columns(4)
-    q1.metric("Activity Rows", format_number(len(activities)))
-    q2.metric("Filtered Rows", format_number(len(filtered)))
-    q3.metric("Public Signup Rows", format_number(len(public)))
-    q4.metric("Volunteer Signup Rows", format_number(len(volunteers)))
-
-    st.markdown("### Missing Values in Key Fields")
-    key_fields = ["ActivityID", "Date", "ActivityType", "ActivitySubType", "TotalVisitors", "VisitorsRegistered", "public_visitor_slots"]
-    missing_summary = (
-        activities[key_fields]
-        .isna()
-        .sum()
-        .reset_index()
-        .rename(columns={"index": "Field", 0: "Missing Values"})
-    )
-    missing_summary["Missing Percent"] = missing_summary["Missing Values"] / len(activities)
-    st.dataframe(missing_summary, use_container_width=True, hide_index=True)
-
-    st.markdown("### Known Sprint 1 Limitations")
-    st.markdown(
-        """
-        * Recommendation categories are preliminary and should be validated with IRC stakeholders.
-        * Supply is currently measured using activity count, while demand is measured using average visitors per activity.
-        * Future sprints should refine the definition of program success and determine how volunteer capacity should influence recommendations.
-        * Historical naming inconsistencies may affect activity subtype comparisons.
-        * Geographic analysis is included as a future enhancement once ZIP and participant location fields are validated.
-        """
-    )
 
 
 # --------------------------------------------------
