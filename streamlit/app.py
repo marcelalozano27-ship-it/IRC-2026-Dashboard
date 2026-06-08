@@ -138,35 +138,16 @@ def create_program_group(name):
     if "volunteer friends" in text or "volunteer partner" in text or "irvine ranch conservancy volunteer" in text:
         return "IRC Volunteer Events"
 
-    # Hiking and fitness
-    if (
-        "fitness hike" in text
-        or "cardio hike" in text
-        or "morning distance hike" in text
-        or "after work fitness" in text
-        or "mid week distance hike" in text
-        or "hike on paved" in text
-    ):
-        return "Fitness Hikes"
-
-    if "full moon hike" in text:
-        return "Full Moon Hikes"
-
-    if "beginner hike" in text:
-        return "Beginner Hikes"
-
-    if "intermediate hike" in text:
-        return "Intermediate Hikes"
-
-    if "advanced hike" in text:
-        return "Advanced Hikes"
+       # Hiking and fitness
+    if "hike" in text or "hiking" in text:
+        return "Hikes"
 
     if "trail running" in text:
         return "Trail Running"
 
     if "yoga" in text:
         return "Yoga and Wellness"
-
+        
     # Biking and equestrian
     if "mountain bike clinic" in text or "bike clinic" in text:
         return "Mountain Bike Clinics"
@@ -363,6 +344,15 @@ for col in numeric_cols:
 for col in ["ActivityType", "ActivitySubType", "ActivityName", "Organization", "ActivityStatus"]:
     activities[col] = activities[col].astype(str).replace("nan", "Unknown").fillna("Unknown")
 
+# Remove cancelled activities before building program groups
+cancelled_mask = (
+    activities["ActivityName"].str.contains("cancelled|canceled", case=False, na=False)
+    | activities["ActivityStatus"].str.contains("cancelled|canceled", case=False, na=False)
+    | activities["CancelReason"].astype(str).str.strip().ne("")
+    | activities["cancel_reason_label"].astype(str).str.strip().ne("")
+)
+
+activities = activities[~cancelled_mask].copy()
 activities["ProgramGroup"] = activities["ActivityName"].apply(create_program_group)
 
 activities["ActualVisitors"] = (
