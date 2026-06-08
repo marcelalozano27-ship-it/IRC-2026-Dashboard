@@ -128,12 +128,13 @@ def create_program_group(name):
     if not text:
         return "Other / Needs Review"
 
-    # Remove cancelled from grouping
     if "cancelled" in text or "canceled" in text or "cancel" in text:
         return "Cancelled"
 
-    # Major public programs
-    if "hike" in text or "trek" in text or "walk" in text:
+    if "trail running" in text:
+        return "Trail Running"
+
+    if "hike" in text or "hiking" in text or "trek" in text or "walk" in text:
         return "Hikes"
 
     if "zumba" in text:
@@ -142,27 +143,18 @@ def create_program_group(name):
     if "yoga" in text or "tai chi" in text or "meditative" in text:
         return "Yoga / Wellness"
 
-    if "trail running" in text:
-        return "Trail Running"
-
-    # Biking / equestrian
-    if "mountain bike clinic" in text or "bike clinic" in text:
-        return "Mountain Bike Clinics"
-
-    if "mountain bike" in text or "bike ride" in text or "freeks ride" in text:
-        return "Mountain Bike Rides"
+    if "mountain bike" in text or "bike ride" in text or "bike clinic" in text or "freeks ride" in text:
+        return "Mountain Biking"
 
     if "equestrian" in text or "training ride" in text:
         return "Equestrian Programs"
 
-    # Special access / events
     if "wilderness access day" in text:
         return "Wilderness Access Days"
 
     if "friends family day" in text or "friends and family day" in text:
         return "Friends & Family Days"
 
-    # Stewardship
     if (
         "native seed farm" in text
         or "seed processing" in text
@@ -185,7 +177,6 @@ def create_program_group(name):
     if "trail crew" in text or "trail work" in text:
         return "Trail Crew / Trail Work"
 
-    # Monitoring / science
     if "camera" in text or "science camera" in text:
         return "Camera Monitoring"
 
@@ -204,31 +195,31 @@ def create_program_group(name):
     if "fire watch" in text:
         return "Fire Watch"
 
-    # Training / education
     if "training" in text or "orientation" in text or "workshop" in text or "cpr" in text or "first aid" in text:
         return "Training / Workshops"
 
     if "exploration day" in text:
         return "Exploration Days"
 
-    if "nature in your backyard" in text:
-        return "Nature in Your Backyard"
+    if "nature in your backyard" in text or "nature" in text:
+        return "Nature Education"
+
+    if "volunteer" in text:
+        return "Volunteer Programs"
+
+    if "family" in text:
+        return "Family Programs"
+
+    if "camp" in text:
+        return "Camps"
+
+    if "photography" in text or "photo" in text:
+        return "Photography"
+
+    if "star" in text or "astronomy" in text:
+        return "Astronomy"
 
     return "Other / Needs Review"
-    # Fallback cleanup for less common activities
-    fallback = html.unescape(str(name))
-    fallback = re.sub(r"(?i)cancelled:|canceled:", "", fallback)
-    fallback = re.sub(r"\*+", "", fallback)
-    fallback = re.sub(r"\b\d{1,2}\s*(AM|PM|am|pm)\b", "", fallback)
-    fallback = re.sub(r"\b20\d{2}\b", "", fallback)
-    fallback = re.sub(r"\([^)]*\)", "", fallback)
-    fallback = fallback.split(":")[0]
-    fallback = fallback.strip()
-
-    if len(fallback) > 45:
-        fallback = fallback[:45].rsplit(" ", 1)[0]
-
-    return fallback if fallback else "Other Program"
 
 
 def build_scorecard(df, group_col="ProgramGroup"):
@@ -360,8 +351,6 @@ for col in numeric_cols:
 for col in ["ActivityType", "ActivitySubType", "ActivityName", "Organization", "ActivityStatus"]:
     activities[col] = activities[col].astype(str).replace("nan", "Unknown").fillna("Unknown")
 
-# Remove cancelled activities before building program groups
-# Remove cancelled activities before building program groups
 cancelled_mask = (
     activities["ActivityName"].str.contains("cancelled|canceled|cancel", case=False, na=False)
     | activities["ActivityStatus"].str.contains("cancelled|canceled|cancel", case=False, na=False)
@@ -453,7 +442,7 @@ IRC has collected over a decade of activity, participant, and volunteer data thr
 # --------------------------------------------------
 
 st.sidebar.header("Filters")
-st.sidebar.caption("Filters apply across all tabs.")
+st.sidebar.caption("Primary filters are shown first. Additional filters are available below.")
 
 filtered = activities.copy()
 
@@ -465,34 +454,40 @@ activity_types = sorted(filtered["ActivityType"].dropna().unique())
 selected_activity_types = st.sidebar.multiselect("Activity Type", activity_types, default=activity_types)
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
+program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
+selected_program_groups = st.sidebar.multiselect("Program Group", program_groups, default=program_groups)
+filtered = filtered[filtered["ProgramGroup"].isin(selected_program_groups)]
+
 month_order = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ]
 
-available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
-selected_months = st.sidebar.multiselect("Month", available_months, default=available_months)
-filtered = filtered[filtered["Month"].isin(selected_months)]
-
 days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
-selected_days = st.sidebar.multiselect("Day of Week", available_days, default=available_days)
-filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
-statuses = sorted(filtered["ActivityStatus"].dropna().unique())
-selected_statuses = st.sidebar.multiselect("Activity Status", statuses, default=statuses)
-filtered = filtered[filtered["ActivityStatus"].isin(selected_statuses)]
+with st.sidebar.expander("Advanced Filters"):
+    available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
+    selected_months = st.multiselect("Month", available_months, default=available_months)
+    filtered = filtered[filtered["Month"].isin(selected_months)]
 
-organizations = sorted(filtered["Organization"].dropna().unique())
-selected_orgs = st.sidebar.multiselect("Organization", organizations, default=organizations)
-filtered = filtered[filtered["Organization"].isin(selected_orgs)]
+    available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
+    selected_days = st.multiselect("Day of Week", available_days, default=available_days)
+    filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
-children_filter = st.sidebar.selectbox("Children Included?", ["All", "Yes", "No"])
+    statuses = sorted(filtered["ActivityStatus"].dropna().unique())
+    selected_statuses = st.multiselect("Activity Status", statuses, default=statuses)
+    filtered = filtered[filtered["ActivityStatus"].isin(selected_statuses)]
 
-if children_filter == "Yes":
-    filtered = filtered[filtered["VisitorsChildren"] > 0]
-elif children_filter == "No":
-    filtered = filtered[filtered["VisitorsChildren"] == 0]
+    organizations = sorted(filtered["Organization"].dropna().unique())
+    selected_orgs = st.multiselect("Organization", organizations, default=organizations)
+    filtered = filtered[filtered["Organization"].isin(selected_orgs)]
+
+    children_filter = st.selectbox("Children Included?", ["All", "Yes", "No"])
+
+    if children_filter == "Yes":
+        filtered = filtered[filtered["VisitorsChildren"] > 0]
+    elif children_filter == "No":
+        filtered = filtered[filtered["VisitorsChildren"] == 0]
 
 min_recurring_count = st.sidebar.slider(
     "Minimum Activities for Program Rankings",
@@ -505,12 +500,14 @@ min_recurring_count = st.sidebar.slider(
 if not public.empty and "ActivityID" in public.columns:
     public_filtered = public[public["ActivityID"].isin(filtered["ActivityID"])].copy()
 
-    states = sorted(public_filtered["state_clean"].dropna().unique())
+    if "state_clean" in public_filtered.columns:
+        states = sorted(public_filtered["state_clean"].dropna().unique())
 
-    if states:
-        selected_states = st.sidebar.multiselect("Participant State", states, default=states)
-        public_filtered = public_filtered[public_filtered["state_clean"].isin(selected_states)]
-        filtered = filtered[filtered["ActivityID"].isin(public_filtered["ActivityID"])]
+        with st.sidebar.expander("Participant Geography Filter"):
+            if states:
+                selected_states = st.multiselect("Participant State", states, default=states)
+                public_filtered = public_filtered[public_filtered["state_clean"].isin(selected_states)]
+                filtered = filtered[filtered["ActivityID"].isin(public_filtered["ActivityID"])]
 else:
     public_filtered = pd.DataFrame()
 
@@ -532,7 +529,7 @@ tabs = st.tabs([
     "Participation Drivers",
     "Timing & Trends",
     "Growth Opportunities",
-    "Resource & Audience Insights",
+    "Audience Insights",
     "Operations"
 ])
 
@@ -619,7 +616,6 @@ with tabs[0]:
             "AvgVisitors",
             "AvgFillRate",
             "AvgNoShowRate",
-            "ProgramHealthScore",
         ]]
 
         table = table.rename(columns={
@@ -630,15 +626,34 @@ with tabs[0]:
             "AvgVisitors": "Avg Visitors",
             "AvgFillRate": "Fill Rate",
             "AvgNoShowRate": "No Show Rate",
-            "ProgramHealthScore": "Health Score",
         })
 
         table["Avg Visitors"] = table["Avg Visitors"].round(1)
         table["Fill Rate"] = table["Fill Rate"].map(pct)
         table["No Show Rate"] = table["No Show Rate"].map(pct)
-        table["Health Score"] = table["Health Score"].round(2)
 
         st.dataframe(table, use_container_width=True, hide_index=True)
+
+        st.subheader("Most Visited Program Groups")
+
+        top_programs = (
+            recurring_scorecard
+            .sort_values("TotalVisitors", ascending=True)
+            .tail(10)
+        )
+
+        fig = px.bar(
+            top_programs,
+            x="TotalVisitors",
+            y="ProgramGroup",
+            orientation="h",
+            title="Top Program Groups by Total Visitors",
+        )
+
+        fig.update_xaxes(title="Total Visitors")
+        fig.update_yaxes(title="Program Group")
+
+        st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
 
     st.markdown("---")
 
@@ -685,14 +700,13 @@ with tabs[1]:
         c3.metric("Avg Visitors", f"{program_card['AvgVisitors']:.1f}")
         c4.metric("Recommendation", program_card["RecommendationCategory"])
 
-        c5, c6, c7, c8 = st.columns(4)
+        c5, c6, c7 = st.columns(3)
 
         c5.metric("Fill Rate", pct(program_card["AvgFillRate"]))
         c6.metric("No Show Rate", pct(program_card["AvgNoShowRate"]))
         c7.metric("Volunteer Hours", f"{program_card['VolunteerHours']:,.1f}")
-        c8.metric("Health Score", f"{program_card['ProgramHealthScore']:.2f}")
 
-        st.subheader("Activity Names Included")
+        st.subheader("Individual Activities Within This Program")
 
         names = (
             program_df.groupby("ActivityName")
@@ -944,11 +958,11 @@ with tabs[4]:
 
 
 # --------------------------------------------------
-# Resource & Audience Insights
+# Audience Insights
 # --------------------------------------------------
 
 with tabs[5]:
-    st.header("Resource & Audience Insights")
+    st.header("Audience Insights")
     st.caption("Evaluate how programs use volunteer, staff, family, and resident participation resources.")
 
     if recurring_scorecard.empty:
@@ -1010,7 +1024,6 @@ with tabs[5]:
         )
 
         org = org.rename(columns={
-            "Organization": "Organization",
             "TotalVisitors": "Total Visitors",
             "AvgVisitors": "Avg Visitors",
             "AvgFillRate": "Fill Rate",
