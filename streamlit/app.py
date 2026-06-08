@@ -345,11 +345,10 @@ for col in ["ActivityType", "ActivitySubType", "ActivityName", "Organization", "
     activities[col] = activities[col].astype(str).replace("nan", "Unknown").fillna("Unknown")
 
 # Remove cancelled activities before building program groups
+# Remove cancelled activities before building program groups
 cancelled_mask = (
     activities["ActivityName"].str.contains("cancelled|canceled", case=False, na=False)
     | activities["ActivityStatus"].str.contains("cancelled|canceled", case=False, na=False)
-    | activities["CancelReason"].astype(str).str.strip().ne("")
-    | activities["cancel_reason_label"].astype(str).str.strip().ne("")
 )
 
 activities = activities[~cancelled_mask].copy()
