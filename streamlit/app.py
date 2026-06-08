@@ -126,79 +126,95 @@ def create_program_group(name):
     text = normalize_activity_text(name)
 
     if not text:
-        return "Other Program"
+        return "Other / Needs Review"
 
-    # Access days and large special events
-    if "wilderness access day" in text:
-        return "Wilderness Access Day"
+    # Remove cancelled from grouping
+    if "cancelled" in text or "canceled" in text or "cancel" in text:
+        return "Cancelled"
 
-    if "friends family day" in text or "friends and family day" in text:
-        return "Friends & Family Day"
-
-    if "volunteer friends" in text or "volunteer partner" in text or "irvine ranch conservancy volunteer" in text:
-        return "IRC Volunteer Events"
-
-       # Hiking and fitness
-    if "hike" in text or "hiking" in text:
+    # Major public programs
+    if "hike" in text or "trek" in text or "walk" in text:
         return "Hikes"
+
+    if "zumba" in text:
+        return "Zumba"
+
+    if "yoga" in text or "tai chi" in text or "meditative" in text:
+        return "Yoga / Wellness"
 
     if "trail running" in text:
         return "Trail Running"
 
-    if "yoga" in text:
-        return "Yoga and Wellness"
-        
-    # Biking and equestrian
+    # Biking / equestrian
     if "mountain bike clinic" in text or "bike clinic" in text:
         return "Mountain Bike Clinics"
 
-    if "mountain bike ride" in text or "bike ride" in text:
+    if "mountain bike" in text or "bike ride" in text or "freeks ride" in text:
         return "Mountain Bike Rides"
 
     if "equestrian" in text or "training ride" in text:
         return "Equestrian Programs"
 
-    # Stewardship and restoration
-    if "native seed farm" in text or "native seed processing" in text or "growing together" in text:
+    # Special access / events
+    if "wilderness access day" in text:
+        return "Wilderness Access Days"
+
+    if "friends family day" in text or "friends and family day" in text:
+        return "Friends & Family Days"
+
+    # Stewardship
+    if (
+        "native seed farm" in text
+        or "seed processing" in text
+        or "seed collection" in text
+        or "harvest" in text
+        or "growing together" in text
+        or "farm steward" in text
+    ):
         return "Native Seed Farm"
 
     if "native plant nursery" in text or "plant nursery" in text:
         return "Native Plant Nursery"
 
+    if "watering" in text or "water trough" in text:
+        return "Watering / Plant Care"
+
     if "invasive" in text or "restoration" in text or "weed" in text or "open space invaders" in text:
         return "Habitat Restoration"
 
-    if "watering" in text:
-        return "Watering and Plant Care"
+    if "trail crew" in text or "trail work" in text:
+        return "Trail Crew / Trail Work"
 
-    if "trail crew" in text:
-        return "Trail Crew"
-
-    # Interpretive, wildlife, and community science
-    if "raptor nest" in text or "raptor monitoring" in text:
-        return "Raptor Nest Monitoring"
-
-    if "wildlife awareness" in text or "wildlife" in text:
-        return "Wildlife Awareness"
+    # Monitoring / science
+    if "camera" in text or "science camera" in text:
+        return "Camera Monitoring"
 
     if "bird" in text:
-        return "Birding"
+        return "Birding / Bird Monitoring"
 
-    if "bugs" in text or "butterflies" in text:
-        return "Bugs and Butterflies"
+    if "butterfly" in text or "butterflies" in text or "bugs" in text:
+        return "Bugs & Butterflies"
 
-    if "science camera" in text or "camera pick up" in text:
-        return "Community Science"
+    if "raptor" in text:
+        return "Raptor Monitoring"
 
-    if "visit nature in your backyard" in text:
-        return "Nature in Your Backyard"
-
-    if "exploration day" in text:
-        return "Exploration Days"
+    if "wildlife" in text or "animal" in text or "tracking" in text:
+        return "Wildlife / Animal Programs"
 
     if "fire watch" in text:
         return "Fire Watch"
 
+    # Training / education
+    if "training" in text or "orientation" in text or "workshop" in text or "cpr" in text or "first aid" in text:
+        return "Training / Workshops"
+
+    if "exploration day" in text:
+        return "Exploration Days"
+
+    if "nature in your backyard" in text:
+        return "Nature in Your Backyard"
+
+    return "Other / Needs Review"
     # Fallback cleanup for less common activities
     fallback = html.unescape(str(name))
     fallback = re.sub(r"(?i)cancelled:|canceled:", "", fallback)
@@ -347,8 +363,8 @@ for col in ["ActivityType", "ActivitySubType", "ActivityName", "Organization", "
 # Remove cancelled activities before building program groups
 # Remove cancelled activities before building program groups
 cancelled_mask = (
-    activities["ActivityName"].str.contains("cancelled|canceled", case=False, na=False)
-    | activities["ActivityStatus"].str.contains("cancelled|canceled", case=False, na=False)
+    activities["ActivityName"].str.contains("cancelled|canceled|cancel", case=False, na=False)
+    | activities["ActivityStatus"].str.contains("cancelled|canceled|cancel", case=False, na=False)
 )
 
 activities = activities[~cancelled_mask].copy()
