@@ -236,11 +236,12 @@ def build_scorecard(df, group_col="ProgramGroup"):
             Registered=("VisitorsRegistered", "sum"),
             NoShows=("VisitorsNoShow", "sum"),
             WalkUps=("VisitorsWalkUp", "sum"),
-            Children=("VisitorsChildren", "sum"),
+            YouthParticipants=("VisitorsChildren", "sum"),
             IrvineResidents=("VisitorsRegisteredIrvineResident", "sum"),
             NonResidents=("VisitorsRegisteredIrvineNonResident", "sum"),
             VolunteerHours=("VolunteerHours", "sum"),
             StaffHours=("StaffHours", "sum"),
+            AvgVolunteers=("Volunteers", "mean"),
             AvgAttendanceRate=("AttendanceRate", "mean"),
             AvgNoShowRate=("NoShowRate", "mean"),
             AvgFillRate=("FillRate", "mean"),
@@ -394,7 +395,10 @@ activities["VisitorsPerStaffHour"] = np.where(
 )
 
 
+# --------------------------------------------------
 # Public signup cleaning
+# --------------------------------------------------
+
 if not public.empty and "ActivityID" in public.columns:
     if "state" in public.columns:
         public["state_clean"] = public["state"].astype(str).str.strip().str.upper()
@@ -430,10 +434,12 @@ if not public.empty and "ActivityID" in public.columns:
 # --------------------------------------------------
 
 st.title("IRC Activity Planning Dashboard")
-st.caption("Sprint 1 prototype for evidence-based activity planning and program recommendations.")
+st.caption("Sprint 1 prototype for executive reporting and activity planning support.")
 
 st.markdown("""
-IRC has collected over a decade of activity, participant, and volunteer data through LetsGoOutside.org. This dashboard is designed as a **decision-support tool**, not simply a reporting tool. Because activity names are often similar but not identical, the dashboard groups related activity names into broader **Program Groups** to support clearer planning decisions.
+IRC has collected activity, participant, and volunteer data through LetsGoOutside.org. 
+This dashboard is organized into two views: an **Executive Dashboard** to summarize IRC's overall program impact, 
+and an **Activity Planning Dashboard** to help evaluate proposed activities using historical performance patterns.
 """)
 
 
@@ -441,8 +447,8 @@ IRC has collected over a decade of activity, participant, and volunteer data thr
 # Sidebar filters
 # --------------------------------------------------
 
-st.sidebar.header("Filters")
-st.sidebar.caption("Primary filters are shown first. Additional filters are available below.")
+st.sidebar.header("Global Filters")
+st.sidebar.caption("These filters apply to both dashboard tabs.")
 
 filtered = activities.copy()
 
@@ -458,6 +464,10 @@ program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
 selected_program_groups = st.sidebar.multiselect("Program Group", program_groups, default=program_groups)
 filtered = filtered[filtered["ProgramGroup"].isin(selected_program_groups)]
 
+organizations = sorted(filtered["Organization"].dropna().unique())
+selected_orgs = st.sidebar.multiselect("Landowner / Property", organizations, default=organizations)
+filtered = filtered[filtered["Organization"].isin(selected_orgs)]
+
 month_order = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -465,7 +475,7 @@ month_order = [
 
 days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-with st.sidebar.expander("Advanced Filters"):
+with st.sidebar.expander("Additional Filters"):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
     selected_months = st.multiselect("Month", available_months, default=available_months)
     filtered = filtered[filtered["Month"].isin(selected_months)]
@@ -478,15 +488,14 @@ with st.sidebar.expander("Advanced Filters"):
     selected_statuses = st.multiselect("Activity Status", statuses, default=statuses)
     filtered = filtered[filtered["ActivityStatus"].isin(selected_statuses)]
 
-    organizations = sorted(filtered["Organization"].dropna().unique())
-    selected_orgs = st.multiselect("Organization", organizations, default=organizations)
-    filtered = filtered[filtered["Organization"].isin(selected_orgs)]
+    family_youth_global = st.selectbox(
+        "Family / Youth Participation",
+        ["All", "Historically included children", "No recorded child participation"]
+    )
 
-    children_filter = st.selectbox("Children Included?", ["All", "Yes", "No"])
-
-    if children_filter == "Yes":
+    if family_youth_global == "Historically included children":
         filtered = filtered[filtered["VisitorsChildren"] > 0]
-    elif children_filter == "No":
+    elif family_youth_global == "No recorded child participation":
         filtered = filtered[filtered["VisitorsChildren"] == 0]
 
 min_recurring_count = st.sidebar.slider(
@@ -524,597 +533,466 @@ if recurring_scorecard.empty:
 # --------------------------------------------------
 
 tabs = st.tabs([
-    "Overview",
-    "Program Explorer",
-    "Participation Drivers",
-    "Timing & Trends",
-    "Growth Opportunities",
-    "Audience Insights",
-    "Operations"
+    "Executive Dashboard",
+    "Activity Planning Dashboard"
 ])
 
 
 # --------------------------------------------------
-# Overview
+# Executive Dashboard
 # --------------------------------------------------
 
 with tabs[0]:
-    st.header("Overview")
+    st.header("Executive Dashboard")
+    st.caption("High-level summary of what IRC accomplished across activities, landowners, participants, and volunteers.")
 
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Activities", f"{len(filtered):,}")
-    col2.metric("Total Visitors", f"{filtered['TotalVisitors'].sum():,.0f}")
-    col3.metric(
-        "Avg Visitors / Activity",
-        f"{filtered['TotalVisitors'].mean():.1f}" if len(filtered) else "N/A"
-    )
-    col4.metric("Program Groups", f"{filtered['ProgramGroup'].nunique():,}")
-
-    st.subheader("Executive Recommendations")
-
-    if scorecard.empty:
+    if filtered.empty:
         st.warning("No data available for the selected filters.")
     else:
-        growth = recurring_scorecard[
-            recurring_scorecard["RecommendationCategory"] == "Expansion Opportunity"
-        ].sort_values("GapScore", ascending=False).head(1)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
-        review = recurring_scorecard[
-            recurring_scorecard["RecommendationCategory"] == "Review Supply"
-        ].sort_values("GapScore", ascending=True).head(1)
+        col1.metric("Total Activities", f"{len(filtered):,}")
+        col2.metric("Total Visitors", f"{filtered['TotalVisitors'].sum():,.0f}")
+        col3.metric("Avg Visitors / Activity", f"{filtered['TotalVisitors'].mean():.1f}")
+        col4.metric("Volunteer Hours", f"{filtered['VolunteerHours'].sum():,.1f}")
+        col5.metric("Youth / Family Participants", f"{filtered['VisitorsChildren'].sum():,.0f}")
 
-        core = recurring_scorecard[
-            recurring_scorecard["RecommendationCategory"] == "Core Program"
-        ].sort_values("ProgramHealthScore", ascending=False).head(1)
+        st.subheader("Executive Summary")
 
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            if not growth.empty:
-                row = growth.iloc[0]
-                st.success(
-                    f"**Expansion Opportunity**\n\n"
-                    f"Consider evaluating whether **{row['ProgramGroup']}** should be expanded. "
-                    f"It has stronger demand relative to how often it is currently offered."
-                )
-            else:
-                st.info("No clear expansion opportunity detected under the current filters.")
-
-        with c2:
-            if not review.empty:
-                row = review.iloc[0]
-                st.warning(
-                    f"**Review Supply**\n\n"
-                    f"Review **{row['ProgramGroup']}** before adding more offerings. "
-                    f"It has higher supply relative to its average participation."
-                )
-            else:
-                st.info("No clear supply concern detected under the current filters.")
-
-        with c3:
-            if not core.empty:
-                row = core.iloc[0]
-                st.info(
-                    f"**Protect Core Program**\n\n"
-                    f"**{row['ProgramGroup']}** appears to be a core program because it combines "
-                    f"strong demand with consistent activity supply."
-                )
-            else:
-                st.info("Core programs will appear here once enough recurring data is available.")
-
-    st.subheader("Top Recurring Program Groups")
-
-    if not recurring_scorecard.empty:
-        table = recurring_scorecard.head(10).copy()
-
-        table = table[[
-            "ProgramGroup",
-            "RecommendationCategory",
-            "ActivityCount",
-            "TotalVisitors",
-            "AvgVisitors",
-            "AvgFillRate",
-            "AvgNoShowRate",
-        ]]
-
-        table = table.rename(columns={
-            "ProgramGroup": "Program Group",
-            "RecommendationCategory": "Recommendation",
-            "ActivityCount": "Activities",
-            "TotalVisitors": "Total Visitors",
-            "AvgVisitors": "Avg Visitors",
-            "AvgFillRate": "Fill Rate",
-            "AvgNoShowRate": "No Show Rate",
-        })
-
-        table["Avg Visitors"] = table["Avg Visitors"].round(1)
-        table["Fill Rate"] = table["Fill Rate"].map(pct)
-        table["No Show Rate"] = table["No Show Rate"].map(pct)
-
-        st.dataframe(table, use_container_width=True, hide_index=True)
-
-        st.subheader("Most Visited Program Groups")
-
-        top_programs = (
-            recurring_scorecard
-            .sort_values("TotalVisitors", ascending=True)
-            .tail(10)
-        )
-
-        fig = px.bar(
-            top_programs,
-            x="TotalVisitors",
-            y="ProgramGroup",
-            orientation="h",
-            title="Top Program Groups by Total Visitors",
-        )
-
-        fig.update_xaxes(title="Total Visitors")
-        fig.update_yaxes(title="Program Group")
-
-        st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
-
-    st.markdown("---")
-
-    st.subheader("Sprint 1 Assumptions & Next Steps")
-
-    st.markdown("""
-    This prototype is intended to establish the analytical direction of the project and gather feedback from IRC before final dashboard development.
-
-    **Current assumptions**
-    - Activity names need to be grouped into broader program groups because similar activities may be named differently.
-    - Program success should consider participation, fill rate, no-show behavior, resource use, and activity supply.
-    - High participation with low supply may indicate expansion opportunity.
-    - High supply with lower participation may indicate programs to review before additional investment.
-
-    **Planned Sprint 2 enhancements**
-    - Validate program groupings with IRC.
-    - Refine recommendation logic using stakeholder feedback.
-    - Improve geographic participation analysis.
-    - Add clearer program-level planning recommendations.
-    """)
-
-
-# --------------------------------------------------
-# Program Explorer
-# --------------------------------------------------
-
-with tabs[1]:
-    st.header("Program Explorer")
-    st.caption("Explore recurring program groups created from similar activity names.")
-
-    if scorecard.empty:
-        st.warning("No program data available for selected filters.")
-    else:
-        program_options = sorted(scorecard["ProgramGroup"].dropna().unique())
-        selected_program = st.selectbox("Select Program Group", program_options)
-
-        program_df = filtered[filtered["ProgramGroup"] == selected_program].copy()
-        program_card = build_scorecard(program_df).iloc[0]
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        c1.metric("Activities", f"{int(program_card['ActivityCount']):,}")
-        c2.metric("Total Visitors", f"{program_card['TotalVisitors']:,.0f}")
-        c3.metric("Avg Visitors", f"{program_card['AvgVisitors']:.1f}")
-        c4.metric("Recommendation", program_card["RecommendationCategory"])
-
-        c5, c6, c7 = st.columns(3)
-
-        c5.metric("Fill Rate", pct(program_card["AvgFillRate"]))
-        c6.metric("No Show Rate", pct(program_card["AvgNoShowRate"]))
-        c7.metric("Volunteer Hours", f"{program_card['VolunteerHours']:,.1f}")
-
-        st.subheader("Individual Activities Within This Program")
-
-        names = (
-            program_df.groupby("ActivityName")
-            .agg(
-                Activities=("ActivityID", "count"),
-                TotalVisitors=("TotalVisitors", "sum"),
-                AvgVisitors=("TotalVisitors", "mean"),
-                FillRate=("FillRate", "mean"),
-                NoShowRate=("NoShowRate", "mean"),
-            )
+        top_org = (
+            filtered.groupby("Organization")
+            .agg(Activities=("ActivityID", "count"))
             .reset_index()
-            .sort_values(["Activities", "TotalVisitors"], ascending=False)
+            .sort_values("Activities", ascending=False)
+            .head(1)
         )
 
-        names = names.rename(columns={
-            "ActivityName": "Activity Name",
-            "TotalVisitors": "Total Visitors",
-            "AvgVisitors": "Avg Visitors",
-            "FillRate": "Fill Rate",
-            "NoShowRate": "No Show Rate",
-        })
-
-        names["Avg Visitors"] = names["Avg Visitors"].round(1)
-        names["Fill Rate"] = names["Fill Rate"].map(pct)
-        names["No Show Rate"] = names["No Show Rate"].map(pct)
-
-        st.dataframe(names.head(30), use_container_width=True, hide_index=True)
-
-        st.subheader("Program Trend")
-
-        trend = (
-            program_df.groupby("Year")
-            .agg(
-                TotalVisitors=("TotalVisitors", "sum"),
-                Activities=("ActivityID", "count"),
-                AvgVisitors=("TotalVisitors", "mean"),
-            )
+        top_program = (
+            filtered.groupby("ProgramGroup")
+            .agg(TotalVisitors=("TotalVisitors", "sum"))
             .reset_index()
-            .sort_values("Year")
+            .sort_values("TotalVisitors", ascending=False)
+            .head(1)
         )
 
-        if not trend.empty:
-            fig = px.line(
-                trend,
-                x="Year",
-                y="TotalVisitors",
-                markers=True,
-                title=f"{selected_program}: Total Visitors by Year",
-            )
-            st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
-
-
-# --------------------------------------------------
-# Participation Drivers
-# --------------------------------------------------
-
-with tabs[2]:
-    st.header("Participation Drivers")
-    st.caption("Identify which recurring program groups drive participation and which show capacity pressure.")
-
-    if recurring_scorecard.empty:
-        st.warning("No data available.")
-    else:
-        top_total = recurring_scorecard.sort_values("TotalVisitors", ascending=False).head(15)
-
-        fig = px.bar(
-            top_total,
-            x="ProgramGroup",
-            y="TotalVisitors",
-            color="RecommendationCategory",
-            title="Top Recurring Program Groups by Total Visitors",
-        )
-        fig.update_xaxes(title="Program Group", tickangle=-35)
-        fig.update_yaxes(title="Total Visitors")
-        st.plotly_chart(clean_fig(fig), use_container_width=True)
-
-        st.subheader("Capacity & No-Show Risk")
-
-        quality = recurring_scorecard.dropna(subset=["AvgFillRate", "AvgNoShowRate"]).copy()
-
-        if quality.empty:
-            st.info("Not enough recurring program data available for capacity and no-show analysis.")
-        else:
-            quality["CapacityRisk"] = np.select(
-                [
-                    quality["AvgFillRate"] >= 0.90,
-                    quality["AvgFillRate"] <= 0.50,
-                ],
-                [
-                    "Near Capacity",
-                    "Underfilled",
-                ],
-                default="Moderate"
-            )
-
-            fig = px.scatter(
-                quality,
-                x="AvgFillRate",
-                y="AvgNoShowRate",
-                size="TotalVisitors",
-                color="CapacityRisk",
-                hover_name="ProgramGroup",
-                title="Capacity and No-Show Risk by Program Group",
-                size_max=55,
-            )
-
-            fig.update_xaxes(title="Average Fill Rate", tickformat=".0%")
-            fig.update_yaxes(title="Average No-Show Rate", tickformat=".0%")
-            fig.add_vline(x=0.90, line_dash="dash")
-            fig.add_vline(x=0.50, line_dash="dash")
-
-            st.plotly_chart(clean_fig(fig, 530), use_container_width=True)
-
+        if not top_org.empty and not top_program.empty:
             st.info(
-                "This view is more useful than ranking attendance rate alone because it shows whether programs are filling available capacity and whether registered participants are actually showing up."
+                f"IRC hosted **{len(filtered):,} activities** with **{filtered['TotalVisitors'].sum():,.0f} total visitors** "
+                f"and **{filtered['VolunteerHours'].sum():,.1f} volunteer hours**. "
+                f"The landowner/property with the most activities was **{top_org.iloc[0]['Organization']}**, "
+                f"and the program group with the highest total attendance was **{top_program.iloc[0]['ProgramGroup']}**."
             )
 
+        st.subheader("Activities by Landowner / Property")
 
-# --------------------------------------------------
-# Timing & Trends
-# --------------------------------------------------
-
-with tabs[3]:
-    st.header("Timing & Trends")
-    st.caption("Understand when participation occurs and which time periods perform best.")
-
-    yearly = (
-        filtered.groupby("Year")
-        .agg(
-            TotalVisitors=("TotalVisitors", "sum"),
-            Activities=("ActivityID", "count"),
-            AvgVisitors=("TotalVisitors", "mean"),
-        )
-        .reset_index()
-        .sort_values("Year")
-    )
-
-    if yearly.empty:
-        st.warning("No timing data available.")
-    else:
-        fig = px.line(
-            yearly,
-            x="Year",
-            y="TotalVisitors",
-            markers=True,
-            title="Total Visitors by Year",
-        )
-        st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
-
-        heat = (
-            filtered.groupby(["Month", "DayOfWeek"])
-            .agg(AvgVisitors=("TotalVisitors", "mean"))
-            .reset_index()
-        )
-
-        heat["Month"] = pd.Categorical(heat["Month"], categories=month_order, ordered=True)
-        heat["DayOfWeek"] = pd.Categorical(heat["DayOfWeek"], categories=days_order, ordered=True)
-
-        pivot = (
-            heat.pivot(index="Month", columns="DayOfWeek", values="AvgVisitors")
-            .reindex(month_order)
-        )
-
-        st.subheader("Attendance Heatmap")
-
-        fig = px.imshow(
-            pivot,
-            text_auto=".1f",
-            aspect="auto",
-            title="Average Visitors by Month and Day of Week",
-        )
-        st.plotly_chart(clean_fig(fig, 560), use_container_width=True)
-
-        month_summary = (
-            filtered.groupby("Month")
-            .agg(
-                Activities=("ActivityID", "count"),
-                TotalVisitors=("TotalVisitors", "sum"),
-                AvgVisitors=("TotalVisitors", "mean"),
-            )
-            .reset_index()
-        )
-
-        month_summary["Month"] = pd.Categorical(
-            month_summary["Month"],
-            categories=month_order,
-            ordered=True
-        )
-
-        month_summary = month_summary.sort_values("Month")
-
-        fig = px.bar(
-            month_summary,
-            x="Month",
-            y="AvgVisitors",
-            title="Average Visitors by Month",
-        )
-        fig.update_xaxes(tickangle=-35)
-        st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
-
-
-# --------------------------------------------------
-# Growth Opportunities
-# --------------------------------------------------
-
-with tabs[4]:
-    st.header("Growth Opportunities")
-    st.caption("Compare activity supply with participant demand to identify expansion or review opportunities.")
-
-    if recurring_scorecard.empty:
-        st.warning("No data available.")
-    else:
-        st.markdown("""
-        **How to read this chart**
-        - High demand and low supply = possible expansion opportunity
-        - High supply and low demand = review before adding more offerings
-        - High supply and high demand = core program
-        - Low supply and low demand = monitor
-        """)
-
-        fig = px.scatter(
-            recurring_scorecard,
-            x="SupplyScore",
-            y="DemandScore",
-            size="TotalVisitors",
-            color="RecommendationCategory",
-            hover_name="ProgramGroup",
-            title="Supply vs Demand Opportunity Matrix",
-            size_max=60,
-        )
-
-        fig.update_xaxes(title="Supply Score: How often the program is offered")
-        fig.update_yaxes(title="Demand Score: Average visitors per activity")
-
-        fig.add_hline(y=recurring_scorecard["DemandScore"].median(), line_dash="dash")
-        fig.add_vline(x=recurring_scorecard["SupplyScore"].median(), line_dash="dash")
-
-        st.plotly_chart(clean_fig(fig, 560), use_container_width=True)
-
-        recommendation_counts = (
-            recurring_scorecard["RecommendationCategory"]
-            .value_counts()
-            .reset_index()
-        )
-
-        recommendation_counts.columns = ["Recommendation", "Program Groups"]
-
-        st.dataframe(recommendation_counts, use_container_width=True, hide_index=True)
-
-
-# --------------------------------------------------
-# Audience Insights
-# --------------------------------------------------
-
-with tabs[5]:
-    st.header("Audience Insights")
-    st.caption("Evaluate how programs use volunteer, staff, family, and resident participation resources.")
-
-    if recurring_scorecard.empty:
-        st.warning("No data available.")
-    else:
-        c1, c2 = st.columns(2)
-
-        with c1:
-            efficiency = (
-                recurring_scorecard
-                .dropna(subset=["VisitorsPerVolunteerHour"])
-                .sort_values("VisitorsPerVolunteerHour", ascending=False)
-                .head(12)
-            )
-
-            if efficiency.empty:
-                st.info("Volunteer hour efficiency is not available for the selected filters.")
-            else:
-                fig = px.bar(
-                    efficiency,
-                    x="ProgramGroup",
-                    y="VisitorsPerVolunteerHour",
-                    color="RecommendationCategory",
-                    title="Visitors per Volunteer Hour",
-                )
-                fig.update_xaxes(title="Program Group", tickangle=-35)
-                fig.update_yaxes(title="Visitors per Volunteer Hour")
-                st.plotly_chart(clean_fig(fig), use_container_width=True)
-
-        with c2:
-            family = recurring_scorecard.sort_values("Children", ascending=False).head(12)
-
-            fig = px.bar(
-                family,
-                x="ProgramGroup",
-                y="Children",
-                color="RecommendationCategory",
-                title="Children Participation by Program Group",
-            )
-            fig.update_xaxes(title="Program Group", tickangle=-35)
-            fig.update_yaxes(title="Children Visitors")
-            st.plotly_chart(clean_fig(fig), use_container_width=True)
-
-        st.subheader("Organization Performance")
-
-        org = (
+        org_summary = (
             filtered.groupby("Organization")
             .agg(
                 Activities=("ActivityID", "count"),
                 TotalVisitors=("TotalVisitors", "sum"),
                 AvgVisitors=("TotalVisitors", "mean"),
-                AvgFillRate=("FillRate", "mean"),
-                AvgNoShowRate=("NoShowRate", "mean"),
                 VolunteerHours=("VolunteerHours", "sum"),
-                StaffHours=("StaffHours", "sum"),
+                YouthParticipants=("VisitorsChildren", "sum"),
             )
             .reset_index()
-            .sort_values("TotalVisitors", ascending=False)
+            .sort_values("Activities", ascending=False)
         )
 
-        org = org.rename(columns={
+        fig = px.bar(
+            org_summary.head(15),
+            x="Organization",
+            y="Activities",
+            title="Number of Activities by Landowner / Property",
+        )
+        fig.update_xaxes(title="Landowner / Property", tickangle=-35)
+        fig.update_yaxes(title="Number of Activities")
+        st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
+
+        org_table = org_summary.rename(columns={
+            "Organization": "Landowner / Property",
             "TotalVisitors": "Total Visitors",
             "AvgVisitors": "Avg Visitors",
-            "AvgFillRate": "Fill Rate",
-            "AvgNoShowRate": "No Show Rate",
             "VolunteerHours": "Volunteer Hours",
-            "StaffHours": "Staff Hours",
-        })
+            "YouthParticipants": "Youth / Family Participants",
+        }).round(1)
 
-        org["Avg Visitors"] = org["Avg Visitors"].round(1)
-        org["Fill Rate"] = org["Fill Rate"].map(pct)
-        org["No Show Rate"] = org["No Show Rate"].map(pct)
+        st.dataframe(org_table, use_container_width=True, hide_index=True)
 
-        st.dataframe(org, use_container_width=True, hide_index=True)
+        st.subheader("Program Performance")
 
-        if not public_filtered.empty and "state_clean" in public_filtered.columns:
-            st.subheader("Participant Geography")
+        if recurring_scorecard.empty:
+            st.info("Not enough program data available for the selected filters.")
+        else:
+            performance = recurring_scorecard.sort_values("TotalVisitors", ascending=False).head(12)
 
-            state_summary = (
-                public_filtered.groupby("state_clean")
-                .size()
-                .reset_index(name="Public Signups")
-                .sort_values("Public Signups", ascending=False)
+            fig = px.bar(
+                performance,
+                x="ProgramGroup",
+                y="TotalVisitors",
+                color="RecommendationCategory",
+                title="Top Program Groups by Total Visitors",
+            )
+            fig.update_xaxes(title="Program Group", tickangle=-35)
+            fig.update_yaxes(title="Total Visitors")
+            st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
+
+            program_table = recurring_scorecard[[
+                "ProgramGroup",
+                "RecommendationCategory",
+                "ActivityCount",
+                "TotalVisitors",
+                "AvgVisitors",
+                "VolunteerHours",
+                "YouthParticipants",
+                "AvgFillRate",
+                "AvgNoShowRate",
+            ]].copy()
+
+            program_table = program_table.rename(columns={
+                "ProgramGroup": "Program Group",
+                "RecommendationCategory": "Recommendation",
+                "ActivityCount": "Activities",
+                "TotalVisitors": "Total Visitors",
+                "AvgVisitors": "Avg Visitors",
+                "VolunteerHours": "Volunteer Hours",
+                "YouthParticipants": "Youth / Family Participants",
+                "AvgFillRate": "Fill Rate",
+                "AvgNoShowRate": "No Show Rate",
+            })
+
+            program_table["Avg Visitors"] = program_table["Avg Visitors"].round(1)
+            program_table["Volunteer Hours"] = program_table["Volunteer Hours"].round(1)
+            program_table["Fill Rate"] = program_table["Fill Rate"].map(pct)
+            program_table["No Show Rate"] = program_table["No Show Rate"].map(pct)
+
+            st.dataframe(program_table, use_container_width=True, hide_index=True)
+
+        st.subheader("Draft Report Summary")
+
+        st.markdown("""
+        This section can later become an exportable leadership summary. For now, it highlights the main items stakeholders may care about:
+
+        - Total activities hosted
+        - Total community participation
+        - Volunteer engagement generated
+        - Landowners/properties with the most activity
+        - Program groups with the strongest performance
+        - Opportunities to expand, monitor, or review programs
+        """)
+
+
+# --------------------------------------------------
+# Activity Planning Dashboard
+# --------------------------------------------------
+
+with tabs[1]:
+    st.header("Activity Planning Dashboard")
+    st.caption(
+        "Explore historical activity performance to identify the dates, properties, audiences, "
+        "and staffing levels associated with successful events."
+    )
+
+    if filtered.empty:
+        st.warning("No data available for the selected filters.")
+    else:
+        st.subheader("Proposed Activity Scenario")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            selected_type = st.selectbox(
+                "Activity Type",
+                ["All"] + sorted(filtered["ActivityType"].dropna().unique())
+            )
+
+        with c2:
+            selected_group = st.selectbox(
+                "Program Group",
+                ["All"] + sorted(filtered["ProgramGroup"].dropna().unique())
+            )
+
+        with c3:
+            selected_org = st.selectbox(
+                "Landowner / Property",
+                ["All"] + sorted(filtered["Organization"].dropna().unique())
+            )
+
+        c4, c5, c6 = st.columns(3)
+
+        with c4:
+            selected_month = st.selectbox("Month", ["All"] + month_order)
+
+        with c5:
+            selected_day = st.selectbox("Day of Week", ["All"] + days_order)
+
+        with c6:
+            family_youth_filter = st.selectbox(
+                "Family / Youth Participation",
+                [
+                    "All",
+                    "Historically included children",
+                    "No recorded child participation"
+                ]
+            )
+
+        c7, c8 = st.columns(2)
+
+        with c7:
+            volunteer_need = st.selectbox(
+                "Volunteer Need",
+                [
+                    "All",
+                    "Low volunteer need",
+                    "Moderate volunteer need",
+                    "High volunteer need"
+                ]
+            )
+
+        with c8:
+            attendance_goal = st.selectbox(
+                "Attendance Goal",
+                [
+                    "All",
+                    "At least 10 visitors",
+                    "At least 20 visitors",
+                    "At least 30 visitors"
+                ]
+            )
+
+        comparable = filtered.copy()
+
+        if selected_type != "All":
+            comparable = comparable[comparable["ActivityType"] == selected_type]
+
+        if selected_group != "All":
+            comparable = comparable[comparable["ProgramGroup"] == selected_group]
+
+        if selected_org != "All":
+            comparable = comparable[comparable["Organization"] == selected_org]
+
+        if selected_month != "All":
+            comparable = comparable[comparable["Month"] == selected_month]
+
+        if selected_day != "All":
+            comparable = comparable[comparable["DayOfWeek"] == selected_day]
+
+        if family_youth_filter == "Historically included children":
+            comparable = comparable[comparable["VisitorsChildren"] > 0]
+        elif family_youth_filter == "No recorded child participation":
+            comparable = comparable[comparable["VisitorsChildren"] == 0]
+
+        if volunteer_need == "Low volunteer need":
+            comparable = comparable[comparable["Volunteers"] <= 2]
+        elif volunteer_need == "Moderate volunteer need":
+            comparable = comparable[
+                (comparable["Volunteers"] > 2)
+                & (comparable["Volunteers"] <= 5)
+            ]
+        elif volunteer_need == "High volunteer need":
+            comparable = comparable[comparable["Volunteers"] > 5]
+
+        if attendance_goal == "At least 10 visitors":
+            comparable = comparable[comparable["TotalVisitors"] >= 10]
+        elif attendance_goal == "At least 20 visitors":
+            comparable = comparable[comparable["TotalVisitors"] >= 20]
+        elif attendance_goal == "At least 30 visitors":
+            comparable = comparable[comparable["TotalVisitors"] >= 30]
+
+        st.subheader("Expected Performance Based on Similar Past Activities")
+
+        if comparable.empty:
+            st.warning("No similar past activities match this scenario. Try removing one or more filters.")
+        else:
+            overall_avg = filtered["TotalVisitors"].mean()
+            scenario_avg = comparable["TotalVisitors"].mean()
+
+            c1, c2, c3, c4 = st.columns(4)
+
+            c1.metric("Similar Past Activities", f"{len(comparable):,}")
+            c2.metric("Avg Visitors", f"{scenario_avg:.1f}")
+            c3.metric("Avg Volunteers", f"{comparable['Volunteers'].mean():.1f}")
+            c4.metric(
+                "Avg Youth / Family Participants",
+                f"{comparable['VisitorsChildren'].mean():.1f}"
+            )
+
+            if scenario_avg > overall_avg:
+                st.success(
+                    f"Based on similar historical activities, this scenario performs **above the dashboard average** "
+                    f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
+                )
+            elif scenario_avg < overall_avg:
+                st.warning(
+                    f"Based on similar historical activities, this scenario performs **below the dashboard average** "
+                    f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
+                )
+            else:
+                st.info("This scenario performs close to the dashboard average.")
+
+            st.subheader("Best Planning Conditions")
+
+            c1, c2 = st.columns(2)
+
+            with c1:
+                month_perf = (
+                    comparable.groupby("Month")
+                    .agg(
+                        Activities=("ActivityID", "count"),
+                        AvgVisitors=("TotalVisitors", "mean"),
+                    )
+                    .reset_index()
+                )
+                month_perf["Month"] = pd.Categorical(
+                    month_perf["Month"],
+                    categories=month_order,
+                    ordered=True
+                )
+                month_perf = month_perf.sort_values("Month")
+
+                fig = px.bar(
+                    month_perf,
+                    x="Month",
+                    y="AvgVisitors",
+                    title="Average Visitors by Month",
+                )
+                fig.update_xaxes(title="Month", tickangle=-35)
+                fig.update_yaxes(title="Avg Visitors")
+                st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
+
+            with c2:
+                day_perf = (
+                    comparable.groupby("DayOfWeek")
+                    .agg(
+                        Activities=("ActivityID", "count"),
+                        AvgVisitors=("TotalVisitors", "mean"),
+                    )
+                    .reset_index()
+                )
+                day_perf["DayOfWeek"] = pd.Categorical(
+                    day_perf["DayOfWeek"],
+                    categories=days_order,
+                    ordered=True
+                )
+                day_perf = day_perf.sort_values("DayOfWeek")
+
+                fig = px.bar(
+                    day_perf,
+                    x="DayOfWeek",
+                    y="AvgVisitors",
+                    title="Average Visitors by Day of Week",
+                )
+                fig.update_xaxes(title="Day of Week", tickangle=-35)
+                fig.update_yaxes(title="Avg Visitors")
+                st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
+
+            st.subheader("Property / Landowner Comparison")
+
+            property_perf = (
+                comparable.groupby("Organization")
+                .agg(
+                    Activities=("ActivityID", "count"),
+                    AvgVisitors=("TotalVisitors", "mean"),
+                    TotalVisitors=("TotalVisitors", "sum"),
+                    AvgVolunteers=("Volunteers", "mean"),
+                    YouthParticipants=("VisitorsChildren", "sum"),
+                )
+                .reset_index()
+                .sort_values("AvgVisitors", ascending=False)
                 .head(15)
             )
 
             fig = px.bar(
-                state_summary,
-                x="state_clean",
-                y="Public Signups",
-                title="Top Participant States",
+                property_perf,
+                x="Organization",
+                y="AvgVisitors",
+                title="Average Visitors by Landowner / Property",
             )
-            fig.update_xaxes(title="State", tickangle=-35)
-            st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
+            fig.update_xaxes(title="Landowner / Property", tickangle=-35)
+            fig.update_yaxes(title="Avg Visitors")
+            st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
 
+            property_table = property_perf.rename(columns={
+                "Organization": "Landowner / Property",
+                "AvgVisitors": "Avg Visitors",
+                "TotalVisitors": "Total Visitors",
+                "AvgVolunteers": "Avg Volunteers",
+                "YouthParticipants": "Youth / Family Participants",
+            }).round(1)
 
-# --------------------------------------------------
-# Operations
-# --------------------------------------------------
+            st.dataframe(property_table, use_container_width=True, hide_index=True)
 
-with tabs[6]:
-    st.header("Operations")
-    st.caption("Identify operational patterns such as activity status and cancellation reasons.")
+            st.subheader("Similar Past Activities")
 
-    status_summary = (
-        filtered.groupby("ActivityStatus")
-        .agg(
-            Activities=("ActivityID", "count"),
-            TotalVisitors=("TotalVisitors", "sum"),
-        )
-        .reset_index()
-        .sort_values("Activities", ascending=False)
-    )
+            similar_table = comparable[[
+                "Date",
+                "ActivityName",
+                "ActivityType",
+                "ProgramGroup",
+                "Organization",
+                "DayOfWeek",
+                "Month",
+                "TotalVisitors",
+                "VisitorsChildren",
+                "Volunteers",
+                "VolunteerHours",
+            ]].copy()
 
-    if status_summary.empty:
-        st.warning("No operational data available.")
-    else:
-        fig = px.bar(
-            status_summary,
-            x="ActivityStatus",
-            y="Activities",
-            title="Activities by Status",
-        )
-        fig.update_xaxes(title="Activity Status", tickangle=-35)
-        fig.update_yaxes(title="Number of Activities")
-        st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
+            similar_table = similar_table.sort_values("TotalVisitors", ascending=False)
 
-    cancel_col = "cancel_reason_label" if "cancel_reason_label" in filtered.columns else "CancelReason"
+            similar_table = similar_table.rename(columns={
+                "ActivityName": "Activity Name",
+                "ActivityType": "Activity Type",
+                "ProgramGroup": "Program Group",
+                "Organization": "Landowner / Property",
+                "DayOfWeek": "Day",
+                "TotalVisitors": "Total Visitors",
+                "VisitorsChildren": "Youth / Family Participants",
+                "VolunteerHours": "Volunteer Hours",
+            })
 
-    cancel_df = filtered[
-        filtered[cancel_col].astype(str).str.strip().ne("")
-        & filtered[cancel_col].astype(str).str.lower().ne("nan")
-        & filtered[cancel_col].astype(str).str.lower().ne("0")
-    ]
+            st.dataframe(
+                similar_table.head(25),
+                use_container_width=True,
+                hide_index=True
+            )
 
-    if not cancel_df.empty:
-        cancel_summary = (
-            cancel_df.groupby(cancel_col)
-            .agg(Activities=("ActivityID", "count"))
-            .reset_index()
-            .sort_values("Activities", ascending=False)
-            .head(15)
-        )
+            st.subheader("Planning Summary")
 
-        fig = px.bar(
-            cancel_summary,
-            x=cancel_col,
-            y="Activities",
-            title="Top Cancellation Reasons",
-        )
-        fig.update_xaxes(title="Cancellation Reason", tickangle=-35)
-        fig.update_yaxes(title="Number of Activities")
-        st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
-    else:
-        st.info("No cancellation reason data available for the selected filters.")
+            best_month = month_perf.sort_values("AvgVisitors", ascending=False).head(1)
+            best_day = day_perf.sort_values("AvgVisitors", ascending=False).head(1)
+            best_property = property_perf.sort_values("AvgVisitors", ascending=False).head(1)
+
+            summary_parts = []
+
+            if not best_month.empty:
+                summary_parts.append(
+                    f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**"
+                )
+
+            if not best_day.empty:
+                summary_parts.append(
+                    f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**"
+                )
+
+            if not best_property.empty:
+                summary_parts.append(
+                    f"Best property based on similar activities: **{best_property.iloc[0]['Organization']}**"
+                )
+
+            summary_parts.append(
+                f"Expected average attendance: **{scenario_avg:.1f} visitors**"
+            )
+
+            summary_parts.append(
+                f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**"
+            )
+
+            summary_parts.append(
+                f"Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**"
+            )
+
+            st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
+
+            st.info(
+                "This section can later become a short planning summary or report-style output for Kelley when reviewing a proposed activity."
+            )
