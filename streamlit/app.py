@@ -113,9 +113,6 @@ def create_program_group(name):
     if not text:
         return "Other / Needs Review"
 
-    if "cancelled" in text or "canceled" in text or "cancel" in text:
-        return "Cancelled"
-
     if "trail running" in text:
         return "Trail Running"
 
@@ -222,16 +219,10 @@ def build_scorecard(df, group_col="ProgramGroup"):
             NoShows=("VisitorsNoShow", "sum"),
             WalkUps=("VisitorsWalkUp", "sum"),
             YouthParticipants=("VisitorsChildren", "sum"),
-            IrvineResidents=("VisitorsRegisteredIrvineResident", "sum"),
-            NonResidents=("VisitorsRegisteredIrvineNonResident", "sum"),
             VolunteerHours=("VolunteerHours", "sum"),
-            StaffHours=("StaffHours", "sum"),
             AvgVolunteers=("Volunteers", "mean"),
-            AvgAttendanceRate=("AttendanceRate", "mean"),
-            AvgNoShowRate=("NoShowRate", "mean"),
             AvgFillRate=("FillRate", "mean"),
-            VisitorsPerVolunteerHour=("VisitorsPerVolunteerHour", "mean"),
-            VisitorsPerStaffHour=("VisitorsPerStaffHour", "mean"),
+            AvgNoShowRate=("NoShowRate", "mean"),
         )
         .reset_index()
         .rename(columns={group_col: "ProgramGroup"})
@@ -240,14 +231,6 @@ def build_scorecard(df, group_col="ProgramGroup"):
     scorecard["SupplyScore"] = scorecard["ActivityCount"] / scorecard["ActivityCount"].max()
     scorecard["DemandScore"] = scorecard["AvgVisitors"] / scorecard["AvgVisitors"].max()
     scorecard["GapScore"] = scorecard["DemandScore"] - scorecard["SupplyScore"]
-
-    scorecard["ProgramHealthScore"] = (
-        scorecard["DemandScore"].fillna(0) * 0.30
-        + scorecard["AvgFillRate"].fillna(scorecard["AvgFillRate"].median()) * 0.25
-        + (1 - scorecard["AvgNoShowRate"].fillna(scorecard["AvgNoShowRate"].median())) * 0.20
-        + scorecard["AvgAttendanceRate"].fillna(scorecard["AvgAttendanceRate"].median()) * 0.15
-        + np.minimum(scorecard["ActivityCount"] / 10, 1) * 0.10
-    )
 
     scorecard["RecommendationCategory"] = np.select(
         [
@@ -260,7 +243,7 @@ def build_scorecard(df, group_col="ProgramGroup"):
         default="Monitor",
     )
 
-    return scorecard.sort_values("ProgramHealthScore", ascending=False)
+    return scorecard.sort_values("TotalVisitors", ascending=False)
 
 
 required_columns = {
@@ -353,18 +336,6 @@ activities["FillRate"] = np.where(
     np.nan,
 )
 
-activities["VisitorsPerVolunteerHour"] = np.where(
-    activities["VolunteerHours"] > 0,
-    activities["TotalVisitors"] / activities["VolunteerHours"],
-    np.nan,
-)
-
-activities["VisitorsPerStaffHour"] = np.where(
-    activities["StaffHours"] > 0,
-    activities["TotalVisitors"] / activities["StaffHours"],
-    np.nan,
-)
-
 
 st.title("IRC Activity Planning Dashboard")
 st.caption("Sprint 1 prototype for executive reporting and activity planning support.")
@@ -375,11 +346,6 @@ and an **Activity Planning Dashboard** to help evaluate proposed activities usin
 """)
 
 
-st.sidebar.header("Global Filters")
-st.sidebar.caption("These filters apply to both dashboard tabs.")
-
-filtered = activities.copy()
-
 month_order = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -387,30 +353,62 @@ month_order = [
 
 days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+
+st.sidebar.header("Global Filters")
+st.sidebar.caption("These filters apply to both dashboard tabs.")
+
+filtered = activities.copy()
+
 years = sorted(filtered["Year"].dropna().astype(int).unique())
-selected_years = st.sidebar.multiselect("Year", years, default=years)
+selected_years = st.sidebar.multiselect(
+    "Year",
+    years,
+    default=years,
+    key="global_year_filter"
+)
 filtered = filtered[filtered["Year"].isin(selected_years)]
 
 activity_types = sorted(filtered["ActivityType"].dropna().unique())
-selected_activity_types = st.sidebar.multiselect("Activity Type", activity_types, default=activity_types)
+selected_activity_types = st.sidebar.multiselect(
+    "Activity Type",
+    activity_types,
+    default=activity_types,
+    key="global_activity_type_filter"
+)
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
 program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
-selected_program_groups = st.sidebar.multiselect("Program Group", program_groups, default=program_groups)
+selected_program_groups = st.sidebar.multiselect(
+    "Program Group",
+    program_groups,
+    default=program_groups,
+    key="global_program_group_filter"
+)
 filtered = filtered[filtered["ProgramGroup"].isin(selected_program_groups)]
 
 with st.sidebar.expander("Additional Filters"):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
-    selected_months = st.multiselect("Month", available_months, default=available_months)
+    selected_months = st.multiselect(
+        "Month",
+        available_months,
+        default=available_months,
+        key="global_month_filter"
+    )
     filtered = filtered[filtered["Month"].isin(selected_months)]
 
     available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
-    selected_days = st.multiselect("Day of Week", available_days, default=available_days)
+    selected_days = st.multiselect(
+        "Day of Week",
+        available_days,
+        default=available_days,
+        key="global_day_filter"
+    )
     filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
     family_youth_global = st.selectbox(
         "Family / Youth Participation",
         ["All", "Historically included children", "No recorded child participation"],
+        key="global_family_youth_filter"
     )
 
     if family_youth_global == "Historically included children":
@@ -418,18 +416,8 @@ with st.sidebar.expander("Additional Filters"):
     elif family_youth_global == "No recorded child participation":
         filtered = filtered[filtered["VisitorsChildren"] == 0]
 
-min_recurring_count = st.sidebar.slider(
-    "Minimum Activities for Program Rankings",
-    min_value=1,
-    max_value=10,
-    value=3,
-)
 
 scorecard = build_scorecard(filtered)
-recurring_scorecard = scorecard[scorecard["ActivityCount"] >= min_recurring_count].copy()
-
-if recurring_scorecard.empty:
-    recurring_scorecard = scorecard.copy()
 
 
 tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
@@ -437,7 +425,7 @@ tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
 
 with tabs[0]:
     st.header("Executive Dashboard")
-    st.caption("High-level summary of what IRC accomplished across activities, landowners, participants, and volunteers.")
+    st.caption("A high-level view of what IRC accomplished.")
 
     if filtered.empty:
         st.warning("No data available for the selected filters.")
@@ -452,11 +440,11 @@ with tabs[0]:
 
         st.subheader("Executive Summary")
 
-        top_org = (
-            filtered.groupby("Organization")
-            .agg(Activities=("ActivityID", "count"))
+        top_type = (
+            filtered.groupby("ActivityType")
+            .agg(TotalVisitors=("TotalVisitors", "sum"))
             .reset_index()
-            .sort_values("Activities", ascending=False)
+            .sort_values("TotalVisitors", ascending=False)
             .head(1)
         )
 
@@ -468,68 +456,80 @@ with tabs[0]:
             .head(1)
         )
 
-        if not top_org.empty and not top_program.empty:
+        if not top_type.empty and not top_program.empty:
             st.info(
-                f"IRC hosted **{len(filtered):,} activities** with **{filtered['TotalVisitors'].sum():,.0f} total visitors** "
-                f"and **{filtered['VolunteerHours'].sum():,.1f} volunteer hours**. "
-                f"The landowner/property with the most activities was **{top_org.iloc[0]['Organization']}**, "
-                f"and the program group with the highest total attendance was **{top_program.iloc[0]['ProgramGroup']}**."
+                f"IRC hosted **{len(filtered):,} activities**, reaching **{filtered['TotalVisitors'].sum():,.0f} visitors** "
+                f"and generating **{filtered['VolunteerHours'].sum():,.1f} volunteer hours**. "
+                f"The highest-attendance activity type was **{top_type.iloc[0]['ActivityType']}**, "
+                f"and the highest-attendance program group was **{top_program.iloc[0]['ProgramGroup']}**."
             )
 
-        st.subheader("Activities by Landowner / Property")
+        col1, col2 = st.columns(2)
 
-        org_summary = (
-            filtered.groupby("Organization")
-            .agg(
-                Activities=("ActivityID", "count"),
-                TotalVisitors=("TotalVisitors", "sum"),
-                AvgVisitors=("TotalVisitors", "mean"),
-                VolunteerHours=("VolunteerHours", "sum"),
-                YouthParticipants=("VisitorsChildren", "sum"),
+        with col1:
+            st.subheader("Activities by Activity Type")
+
+            type_activity = (
+                filtered.groupby("ActivityType")
+                .agg(Activities=("ActivityID", "count"))
+                .reset_index()
+                .sort_values("Activities", ascending=True)
+                .tail(12)
             )
-            .reset_index()
-            .sort_values("Activities", ascending=False)
-        )
-
-        fig = px.bar(
-            org_summary.head(15),
-            x="Organization",
-            y="Activities",
-            title="Number of Activities by Landowner / Property",
-        )
-        fig.update_xaxes(title="Landowner / Property", tickangle=-35)
-        fig.update_yaxes(title="Number of Activities")
-        st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
-
-        org_table = org_summary.rename(columns={
-            "Organization": "Landowner / Property",
-            "TotalVisitors": "Total Visitors",
-            "AvgVisitors": "Avg Visitors",
-            "VolunteerHours": "Volunteer Hours",
-            "YouthParticipants": "Youth / Family Participants",
-        }).round(1)
-
-        st.dataframe(org_table, use_container_width=True, hide_index=True)
-
-        st.subheader("Program Performance")
-
-        if recurring_scorecard.empty:
-            st.info("Not enough program data available for the selected filters.")
-        else:
-            performance = recurring_scorecard.sort_values("TotalVisitors", ascending=False).head(12)
 
             fig = px.bar(
-                performance,
-                x="ProgramGroup",
-                y="TotalVisitors",
-                color="RecommendationCategory",
-                title="Top Program Groups by Total Visitors",
+                type_activity,
+                x="Activities",
+                y="ActivityType",
+                orientation="h",
+                title="Number of Activities by Activity Type",
             )
-            fig.update_xaxes(title="Program Group", tickangle=-35)
-            fig.update_yaxes(title="Total Visitors")
+            fig.update_xaxes(title="Number of Activities")
+            fig.update_yaxes(title="Activity Type")
             st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
 
-            program_table = recurring_scorecard[[
+        with col2:
+            st.subheader("Visitors by Activity Type")
+
+            type_visitors = (
+                filtered.groupby("ActivityType")
+                .agg(TotalVisitors=("TotalVisitors", "sum"))
+                .reset_index()
+                .sort_values("TotalVisitors", ascending=True)
+                .tail(12)
+            )
+
+            fig = px.bar(
+                type_visitors,
+                x="TotalVisitors",
+                y="ActivityType",
+                orientation="h",
+                title="Total Visitors by Activity Type",
+            )
+            fig.update_xaxes(title="Total Visitors")
+            fig.update_yaxes(title="Activity Type")
+            st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
+
+        st.subheader("Program Group Performance")
+
+        if scorecard.empty:
+            st.info("No program data available.")
+        else:
+            program_chart = scorecard.sort_values("TotalVisitors", ascending=True).tail(12)
+
+            fig = px.bar(
+                program_chart,
+                x="TotalVisitors",
+                y="ProgramGroup",
+                color="RecommendationCategory",
+                orientation="h",
+                title="Top Program Groups by Total Visitors",
+            )
+            fig.update_xaxes(title="Total Visitors")
+            fig.update_yaxes(title="Program Group")
+            st.plotly_chart(clean_fig(fig, 550), use_container_width=True)
+
+            program_table = scorecard[[
                 "ProgramGroup",
                 "RecommendationCategory",
                 "ActivityCount",
@@ -563,22 +563,20 @@ with tabs[0]:
         st.subheader("Draft Report Summary")
 
         st.markdown("""
-        This section can later become an exportable leadership summary. For now, it highlights:
+        This section can later become a simple leadership report. For now, it summarizes:
 
         - Total activities hosted
-        - Total community participation
-        - Volunteer engagement generated
-        - Landowners/properties with the most activity
+        - Total visitors reached
+        - Volunteer hours generated
+        - Activity types with the strongest participation
         - Program groups with the strongest performance
-        - Opportunities to expand, monitor, or review programs
+        - Areas that may be worth expanding, monitoring, or reviewing
         """)
 
 
 with tabs[1]:
     st.header("Activity Planning Dashboard")
-    st.caption(
-        "Use historical activity data to understand how similar activities have performed in the past."
-    )
+    st.caption("Use historical data to understand how similar activities have performed in the past.")
 
     if filtered.empty:
         st.warning("No data available for the selected filters.")
@@ -588,38 +586,47 @@ with tabs[1]:
         c1, c2 = st.columns(2)
 
         with c1:
+            planning_types_options = sorted(filtered["ActivityType"].dropna().unique())
             planning_types = st.multiselect(
                 "Activity Type",
-                sorted(filtered["ActivityType"].dropna().unique()),
-                default=sorted(filtered["ActivityType"].dropna().unique()),
+                planning_types_options,
+                default=planning_types_options,
+                key="planning_activity_type_filter"
             )
 
         with c2:
+            planning_groups_options = sorted(filtered["ProgramGroup"].dropna().unique())
             planning_groups = st.multiselect(
                 "Program Group",
-                sorted(filtered["ProgramGroup"].dropna().unique()),
-                default=sorted(filtered["ProgramGroup"].dropna().unique()),
+                planning_groups_options,
+                default=planning_groups_options,
+                key="planning_program_group_filter"
             )
 
         c3, c4 = st.columns(2)
 
         with c3:
+            planning_month_options = [m for m in month_order if m in filtered["Month"].dropna().unique()]
             planning_months = st.multiselect(
                 "Month",
-                [m for m in month_order if m in filtered["Month"].dropna().unique()],
-                default=[m for m in month_order if m in filtered["Month"].dropna().unique()],
+                planning_month_options,
+                default=planning_month_options,
+                key="planning_month_filter"
             )
 
         with c4:
+            planning_day_options = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
             planning_days = st.multiselect(
                 "Day of Week",
-                [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()],
-                default=[d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()],
+                planning_day_options,
+                default=planning_day_options,
+                key="planning_day_filter"
             )
 
         family_youth_filter = st.selectbox(
             "Family / Youth Participation",
             ["All", "Historically included children", "No recorded child participation"],
+            key="planning_family_youth_filter"
         )
 
         comparable = filtered.copy()
@@ -634,7 +641,7 @@ with tabs[1]:
         elif family_youth_filter == "No recorded child participation":
             comparable = comparable[comparable["VisitorsChildren"] == 0]
 
-        st.subheader("Expected Performance Based on Similar Past Activities")
+        st.subheader("Performance Based on Similar Past Activities")
 
         if comparable.empty:
             st.warning("No similar past activities match this scenario. Try removing one or more filters.")
@@ -651,18 +658,18 @@ with tabs[1]:
 
             if scenario_avg > overall_avg:
                 st.success(
-                    f"Similar activities performed **above the dashboard average** "
+                    f"Similar activities performed **above the current dashboard average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             elif scenario_avg < overall_avg:
                 st.warning(
-                    f"Similar activities performed **below the dashboard average** "
+                    f"Similar activities performed **below the current dashboard average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             else:
                 st.info("This scenario performs close to the dashboard average.")
 
-            st.subheader("Best Planning Conditions")
+            st.subheader("Best Timing Patterns")
 
             col1, col2 = st.columns(2)
 
@@ -675,7 +682,12 @@ with tabs[1]:
                     )
                     .reset_index()
                 )
-                month_perf["Month"] = pd.Categorical(month_perf["Month"], categories=month_order, ordered=True)
+
+                month_perf["Month"] = pd.Categorical(
+                    month_perf["Month"],
+                    categories=month_order,
+                    ordered=True
+                )
                 month_perf = month_perf.sort_values("Month")
 
                 fig = px.bar(
@@ -685,7 +697,7 @@ with tabs[1]:
                     title="Average Visitors by Month",
                 )
                 fig.update_xaxes(title="Month", tickangle=-35)
-                fig.update_yaxes(title="Avg Visitors")
+                fig.update_yaxes(title="Average Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
 
             with col2:
@@ -697,7 +709,12 @@ with tabs[1]:
                     )
                     .reset_index()
                 )
-                day_perf["DayOfWeek"] = pd.Categorical(day_perf["DayOfWeek"], categories=days_order, ordered=True)
+
+                day_perf["DayOfWeek"] = pd.Categorical(
+                    day_perf["DayOfWeek"],
+                    categories=days_order,
+                    ordered=True
+                )
                 day_perf = day_perf.sort_values("DayOfWeek")
 
                 fig = px.bar(
@@ -707,46 +724,8 @@ with tabs[1]:
                     title="Average Visitors by Day of Week",
                 )
                 fig.update_xaxes(title="Day of Week", tickangle=-35)
-                fig.update_yaxes(title="Avg Visitors")
+                fig.update_yaxes(title="Average Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
-
-            st.subheader("Landowner / Property Performance")
-
-            property_perf = (
-                comparable.groupby("Organization")
-                .agg(
-                    Activities=("ActivityID", "count"),
-                    AvgVisitors=("TotalVisitors", "mean"),
-                    TotalVisitors=("TotalVisitors", "sum"),
-                    AvgVolunteers=("Volunteers", "mean"),
-                    YouthParticipants=("VisitorsChildren", "sum"),
-                )
-                .reset_index()
-                .sort_values("AvgVisitors", ascending=False)
-                .head(15)
-            )
-
-            fig = px.bar(
-                property_perf,
-                x="Organization",
-                y="AvgVisitors",
-                title="Average Visitors by Landowner / Property",
-            )
-            fig.update_xaxes(title="Landowner / Property", tickangle=-35)
-            fig.update_yaxes(title="Avg Visitors")
-            st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
-
-            st.dataframe(
-                property_perf.rename(columns={
-                    "Organization": "Landowner / Property",
-                    "AvgVisitors": "Avg Visitors",
-                    "TotalVisitors": "Total Visitors",
-                    "AvgVolunteers": "Avg Volunteers",
-                    "YouthParticipants": "Youth / Family Participants",
-                }).round(1),
-                use_container_width=True,
-                hide_index=True,
-            )
 
             st.subheader("Similar Past Activities")
 
@@ -770,7 +749,7 @@ with tabs[1]:
                 "ActivityName": "Activity Name",
                 "ActivityType": "Activity Type",
                 "ProgramGroup": "Program Group",
-                "Organization": "Landowner / Property",
+                "Organization": "Organization",
                 "DayOfWeek": "Day",
                 "TotalVisitors": "Total Visitors",
                 "VisitorsChildren": "Youth / Family Participants",
@@ -783,7 +762,6 @@ with tabs[1]:
 
             best_month = month_perf.sort_values("AvgVisitors", ascending=False).head(1)
             best_day = day_perf.sort_values("AvgVisitors", ascending=False).head(1)
-            best_property = property_perf.sort_values("AvgVisitors", ascending=False).head(1)
 
             summary_parts = []
 
@@ -793,15 +771,10 @@ with tabs[1]:
             if not best_day.empty:
                 summary_parts.append(f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**")
 
-            if not best_property.empty:
-                summary_parts.append(f"Best landowner/property based on similar activities: **{best_property.iloc[0]['Organization']}**")
-
             summary_parts.append(f"Expected average attendance: **{scenario_avg:.1f} visitors**")
             summary_parts.append(f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**")
             summary_parts.append(f"Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**")
 
             st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
 
-            st.info(
-                "This section can later become a short planning summary for Kelley when reviewing a proposed activity."
-            )
+            st.info("This section can later become a short planning summary for Kelley when reviewing a proposed activity.")
