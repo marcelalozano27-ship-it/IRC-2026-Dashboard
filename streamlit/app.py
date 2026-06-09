@@ -419,7 +419,6 @@ with st.sidebar.expander("Additional Filters"):
 
 scorecard = build_scorecard(filtered)
 
-
 tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
 
 
@@ -594,12 +593,20 @@ with tabs[1]:
                 key="planning_activity_type_filter"
             )
 
+        if planning_types:
+            valid_program_groups = sorted(
+                filtered[
+                    filtered["ActivityType"].isin(planning_types)
+                ]["ProgramGroup"].dropna().unique()
+            )
+        else:
+            valid_program_groups = []
+
         with c2:
-            planning_groups_options = sorted(filtered["ProgramGroup"].dropna().unique())
             planning_groups = st.multiselect(
                 "Program Group",
-                planning_groups_options,
-                default=planning_groups_options,
+                valid_program_groups,
+                default=valid_program_groups,
                 key="planning_program_group_filter"
             )
 
