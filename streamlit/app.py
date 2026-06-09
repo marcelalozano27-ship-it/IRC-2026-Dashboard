@@ -7,17 +7,10 @@ import plotly.express as px
 import streamlit as st
 
 
-st.set_page_config(
-    page_title="IRC Activity Planning Dashboard",
-    layout="wide"
-)
+st.set_page_config(page_title="IRC Activity Planning Dashboard", layout="wide")
 
 SHARED_PASSWORD = "lgo2026"
 
-
-# --------------------------------------------------
-# Password protection
-# --------------------------------------------------
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -44,10 +37,6 @@ if not check_password():
     st.stop()
 
 
-# --------------------------------------------------
-# Load data
-# --------------------------------------------------
-
 @st.cache_data
 def load_data():
     activities = pd.read_csv("data/activity_level.csv")
@@ -67,10 +56,6 @@ def load_data():
 
 activities, public, volunteers = load_data()
 
-
-# --------------------------------------------------
-# Helpers
-# --------------------------------------------------
 
 def ensure_column(df, column, default_value):
     if column not in df.columns:
@@ -256,12 +241,6 @@ def build_scorecard(df, group_col="ProgramGroup"):
     scorecard["DemandScore"] = scorecard["AvgVisitors"] / scorecard["AvgVisitors"].max()
     scorecard["GapScore"] = scorecard["DemandScore"] - scorecard["SupplyScore"]
 
-    scorecard["ResidentShare"] = np.where(
-        scorecard["IrvineResidents"] + scorecard["NonResidents"] > 0,
-        scorecard["IrvineResidents"] / (scorecard["IrvineResidents"] + scorecard["NonResidents"]),
-        np.nan
-    )
-
     scorecard["ProgramHealthScore"] = (
         scorecard["DemandScore"].fillna(0) * 0.30
         + scorecard["AvgFillRate"].fillna(scorecard["AvgFillRate"].median()) * 0.25
@@ -277,20 +256,12 @@ def build_scorecard(df, group_col="ProgramGroup"):
             (scorecard["DemandScore"] >= scorecard["DemandScore"].median())
             & (scorecard["SupplyScore"] >= scorecard["SupplyScore"].median()),
         ],
-        [
-            "Expansion Opportunity",
-            "Review Supply",
-            "Core Program",
-        ],
-        default="Monitor"
+        ["Expansion Opportunity", "Review Supply", "Core Program"],
+        default="Monitor",
     )
 
     return scorecard.sort_values("ProgramHealthScore", ascending=False)
 
-
-# --------------------------------------------------
-# Data cleaning and feature engineering
-# --------------------------------------------------
 
 required_columns = {
     "ActivityID": "",
@@ -367,90 +338,54 @@ activities["ActualVisitors"] = (
 activities["AttendanceRate"] = np.where(
     activities["VisitorsRegistered"] > 0,
     activities["ActualVisitors"] / activities["VisitorsRegistered"],
-    np.nan
+    np.nan,
 )
 
 activities["NoShowRate"] = np.where(
     activities["VisitorsRegistered"] > 0,
     activities["VisitorsNoShow"] / activities["VisitorsRegistered"],
-    np.nan
+    np.nan,
 )
 
 activities["FillRate"] = np.where(
     activities["public_visitor_slots"] > 0,
     activities["VisitorsRegistered"] / activities["public_visitor_slots"],
-    np.nan
+    np.nan,
 )
 
 activities["VisitorsPerVolunteerHour"] = np.where(
     activities["VolunteerHours"] > 0,
     activities["TotalVisitors"] / activities["VolunteerHours"],
-    np.nan
+    np.nan,
 )
 
 activities["VisitorsPerStaffHour"] = np.where(
     activities["StaffHours"] > 0,
     activities["TotalVisitors"] / activities["StaffHours"],
-    np.nan
+    np.nan,
 )
 
-
-# --------------------------------------------------
-# Public signup cleaning
-# --------------------------------------------------
-
-if not public.empty and "ActivityID" in public.columns:
-    if "state" in public.columns:
-        public["state_clean"] = public["state"].astype(str).str.strip().str.upper()
-
-        state_map = {
-            "CA": "California",
-            "CA.": "California",
-            "CALIFORNIA": "California",
-            "CALIF": "California",
-            "AZ": "Arizona",
-            "ARIZONA": "Arizona",
-            "TX": "Texas",
-            "TEXAS": "Texas",
-            "NV": "Nevada",
-            "NEVADA": "Nevada",
-            "CO": "Colorado",
-            "COLORADO": "Colorado",
-            "FL": "Florida",
-            "FLORIDA": "Florida",
-        }
-
-        public["state_clean"] = (
-            public["state_clean"]
-            .map(state_map)
-            .fillna(public["state_clean"].str.title())
-        )
-    else:
-        public["state_clean"] = "Unknown"
-
-
-# --------------------------------------------------
-# Header
-# --------------------------------------------------
 
 st.title("IRC Activity Planning Dashboard")
 st.caption("Sprint 1 prototype for executive reporting and activity planning support.")
 
 st.markdown("""
-IRC has collected activity, participant, and volunteer data through LetsGoOutside.org. 
 This dashboard is organized into two views: an **Executive Dashboard** to summarize IRC's overall program impact, 
 and an **Activity Planning Dashboard** to help evaluate proposed activities using historical performance patterns.
 """)
 
 
-# --------------------------------------------------
-# Sidebar filters
-# --------------------------------------------------
-
 st.sidebar.header("Global Filters")
 st.sidebar.caption("These filters apply to both dashboard tabs.")
 
 filtered = activities.copy()
+
+month_order = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+
+days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 years = sorted(filtered["Year"].dropna().astype(int).unique())
 selected_years = st.sidebar.multiselect("Year", years, default=years)
@@ -464,17 +399,6 @@ program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
 selected_program_groups = st.sidebar.multiselect("Program Group", program_groups, default=program_groups)
 filtered = filtered[filtered["ProgramGroup"].isin(selected_program_groups)]
 
-organizations = sorted(filtered["Organization"].dropna().unique())
-selected_orgs = st.sidebar.multiselect("Landowner / Property", organizations, default=organizations)
-filtered = filtered[filtered["Organization"].isin(selected_orgs)]
-
-month_order = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-]
-
-days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
 with st.sidebar.expander("Additional Filters"):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
     selected_months = st.multiselect("Month", available_months, default=available_months)
@@ -484,13 +408,9 @@ with st.sidebar.expander("Additional Filters"):
     selected_days = st.multiselect("Day of Week", available_days, default=available_days)
     filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
-    statuses = sorted(filtered["ActivityStatus"].dropna().unique())
-    selected_statuses = st.multiselect("Activity Status", statuses, default=statuses)
-    filtered = filtered[filtered["ActivityStatus"].isin(selected_statuses)]
-
     family_youth_global = st.selectbox(
         "Family / Youth Participation",
-        ["All", "Historically included children", "No recorded child participation"]
+        ["All", "Historically included children", "No recorded child participation"],
     )
 
     if family_youth_global == "Historically included children":
@@ -503,23 +423,7 @@ min_recurring_count = st.sidebar.slider(
     min_value=1,
     max_value=10,
     value=3,
-    help="Use this to reduce one-time events in ranking tables and charts."
 )
-
-if not public.empty and "ActivityID" in public.columns:
-    public_filtered = public[public["ActivityID"].isin(filtered["ActivityID"])].copy()
-
-    if "state_clean" in public_filtered.columns:
-        states = sorted(public_filtered["state_clean"].dropna().unique())
-
-        with st.sidebar.expander("Participant Geography Filter"):
-            if states:
-                selected_states = st.multiselect("Participant State", states, default=states)
-                public_filtered = public_filtered[public_filtered["state_clean"].isin(selected_states)]
-                filtered = filtered[filtered["ActivityID"].isin(public_filtered["ActivityID"])]
-else:
-    public_filtered = pd.DataFrame()
-
 
 scorecard = build_scorecard(filtered)
 recurring_scorecard = scorecard[scorecard["ActivityCount"] >= min_recurring_count].copy()
@@ -528,19 +432,8 @@ if recurring_scorecard.empty:
     recurring_scorecard = scorecard.copy()
 
 
-# --------------------------------------------------
-# Tabs
-# --------------------------------------------------
+tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
 
-tabs = st.tabs([
-    "Executive Dashboard",
-    "Activity Planning Dashboard"
-])
-
-
-# --------------------------------------------------
-# Executive Dashboard
-# --------------------------------------------------
 
 with tabs[0]:
     st.header("Executive Dashboard")
@@ -670,7 +563,7 @@ with tabs[0]:
         st.subheader("Draft Report Summary")
 
         st.markdown("""
-        This section can later become an exportable leadership summary. For now, it highlights the main items stakeholders may care about:
+        This section can later become an exportable leadership summary. For now, it highlights:
 
         - Total activities hosted
         - Total community participation
@@ -681,15 +574,10 @@ with tabs[0]:
         """)
 
 
-# --------------------------------------------------
-# Activity Planning Dashboard
-# --------------------------------------------------
-
 with tabs[1]:
     st.header("Activity Planning Dashboard")
     st.caption(
-        "Explore historical activity performance to identify the dates, properties, audiences, "
-        "and staffing levels associated with successful events."
+        "Use historical activity data to understand how similar activities have performed in the past."
     )
 
     if filtered.empty:
@@ -697,106 +585,54 @@ with tabs[1]:
     else:
         st.subheader("Proposed Activity Scenario")
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
 
         with c1:
-            selected_type = st.selectbox(
+            planning_types = st.multiselect(
                 "Activity Type",
-                ["All"] + sorted(filtered["ActivityType"].dropna().unique())
+                sorted(filtered["ActivityType"].dropna().unique()),
+                default=sorted(filtered["ActivityType"].dropna().unique()),
             )
 
         with c2:
-            selected_group = st.selectbox(
+            planning_groups = st.multiselect(
                 "Program Group",
-                ["All"] + sorted(filtered["ProgramGroup"].dropna().unique())
+                sorted(filtered["ProgramGroup"].dropna().unique()),
+                default=sorted(filtered["ProgramGroup"].dropna().unique()),
             )
+
+        c3, c4 = st.columns(2)
 
         with c3:
-            selected_org = st.selectbox(
-                "Landowner / Property",
-                ["All"] + sorted(filtered["Organization"].dropna().unique())
+            planning_months = st.multiselect(
+                "Month",
+                [m for m in month_order if m in filtered["Month"].dropna().unique()],
+                default=[m for m in month_order if m in filtered["Month"].dropna().unique()],
             )
-
-        c4, c5, c6 = st.columns(3)
 
         with c4:
-            selected_month = st.selectbox("Month", ["All"] + month_order)
-
-        with c5:
-            selected_day = st.selectbox("Day of Week", ["All"] + days_order)
-
-        with c6:
-            family_youth_filter = st.selectbox(
-                "Family / Youth Participation",
-                [
-                    "All",
-                    "Historically included children",
-                    "No recorded child participation"
-                ]
+            planning_days = st.multiselect(
+                "Day of Week",
+                [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()],
+                default=[d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()],
             )
 
-        c7, c8 = st.columns(2)
-
-        with c7:
-            volunteer_need = st.selectbox(
-                "Volunteer Need",
-                [
-                    "All",
-                    "Low volunteer need",
-                    "Moderate volunteer need",
-                    "High volunteer need"
-                ]
-            )
-
-        with c8:
-            attendance_goal = st.selectbox(
-                "Attendance Goal",
-                [
-                    "All",
-                    "At least 10 visitors",
-                    "At least 20 visitors",
-                    "At least 30 visitors"
-                ]
-            )
+        family_youth_filter = st.selectbox(
+            "Family / Youth Participation",
+            ["All", "Historically included children", "No recorded child participation"],
+        )
 
         comparable = filtered.copy()
 
-        if selected_type != "All":
-            comparable = comparable[comparable["ActivityType"] == selected_type]
-
-        if selected_group != "All":
-            comparable = comparable[comparable["ProgramGroup"] == selected_group]
-
-        if selected_org != "All":
-            comparable = comparable[comparable["Organization"] == selected_org]
-
-        if selected_month != "All":
-            comparable = comparable[comparable["Month"] == selected_month]
-
-        if selected_day != "All":
-            comparable = comparable[comparable["DayOfWeek"] == selected_day]
+        comparable = comparable[comparable["ActivityType"].isin(planning_types)]
+        comparable = comparable[comparable["ProgramGroup"].isin(planning_groups)]
+        comparable = comparable[comparable["Month"].isin(planning_months)]
+        comparable = comparable[comparable["DayOfWeek"].isin(planning_days)]
 
         if family_youth_filter == "Historically included children":
             comparable = comparable[comparable["VisitorsChildren"] > 0]
         elif family_youth_filter == "No recorded child participation":
             comparable = comparable[comparable["VisitorsChildren"] == 0]
-
-        if volunteer_need == "Low volunteer need":
-            comparable = comparable[comparable["Volunteers"] <= 2]
-        elif volunteer_need == "Moderate volunteer need":
-            comparable = comparable[
-                (comparable["Volunteers"] > 2)
-                & (comparable["Volunteers"] <= 5)
-            ]
-        elif volunteer_need == "High volunteer need":
-            comparable = comparable[comparable["Volunteers"] > 5]
-
-        if attendance_goal == "At least 10 visitors":
-            comparable = comparable[comparable["TotalVisitors"] >= 10]
-        elif attendance_goal == "At least 20 visitors":
-            comparable = comparable[comparable["TotalVisitors"] >= 20]
-        elif attendance_goal == "At least 30 visitors":
-            comparable = comparable[comparable["TotalVisitors"] >= 30]
 
         st.subheader("Expected Performance Based on Similar Past Activities")
 
@@ -806,24 +642,21 @@ with tabs[1]:
             overall_avg = filtered["TotalVisitors"].mean()
             scenario_avg = comparable["TotalVisitors"].mean()
 
-            c1, c2, c3, c4 = st.columns(4)
+            col1, col2, col3, col4 = st.columns(4)
 
-            c1.metric("Similar Past Activities", f"{len(comparable):,}")
-            c2.metric("Avg Visitors", f"{scenario_avg:.1f}")
-            c3.metric("Avg Volunteers", f"{comparable['Volunteers'].mean():.1f}")
-            c4.metric(
-                "Avg Youth / Family Participants",
-                f"{comparable['VisitorsChildren'].mean():.1f}"
-            )
+            col1.metric("Similar Past Activities", f"{len(comparable):,}")
+            col2.metric("Avg Visitors", f"{scenario_avg:.1f}")
+            col3.metric("Avg Volunteers", f"{comparable['Volunteers'].mean():.1f}")
+            col4.metric("Avg Youth / Family Participants", f"{comparable['VisitorsChildren'].mean():.1f}")
 
             if scenario_avg > overall_avg:
                 st.success(
-                    f"Based on similar historical activities, this scenario performs **above the dashboard average** "
+                    f"Similar activities performed **above the dashboard average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             elif scenario_avg < overall_avg:
                 st.warning(
-                    f"Based on similar historical activities, this scenario performs **below the dashboard average** "
+                    f"Similar activities performed **below the dashboard average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             else:
@@ -831,9 +664,9 @@ with tabs[1]:
 
             st.subheader("Best Planning Conditions")
 
-            c1, c2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-            with c1:
+            with col1:
                 month_perf = (
                     comparable.groupby("Month")
                     .agg(
@@ -842,11 +675,7 @@ with tabs[1]:
                     )
                     .reset_index()
                 )
-                month_perf["Month"] = pd.Categorical(
-                    month_perf["Month"],
-                    categories=month_order,
-                    ordered=True
-                )
+                month_perf["Month"] = pd.Categorical(month_perf["Month"], categories=month_order, ordered=True)
                 month_perf = month_perf.sort_values("Month")
 
                 fig = px.bar(
@@ -859,7 +688,7 @@ with tabs[1]:
                 fig.update_yaxes(title="Avg Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
 
-            with c2:
+            with col2:
                 day_perf = (
                     comparable.groupby("DayOfWeek")
                     .agg(
@@ -868,11 +697,7 @@ with tabs[1]:
                     )
                     .reset_index()
                 )
-                day_perf["DayOfWeek"] = pd.Categorical(
-                    day_perf["DayOfWeek"],
-                    categories=days_order,
-                    ordered=True
-                )
+                day_perf["DayOfWeek"] = pd.Categorical(day_perf["DayOfWeek"], categories=days_order, ordered=True)
                 day_perf = day_perf.sort_values("DayOfWeek")
 
                 fig = px.bar(
@@ -885,7 +710,7 @@ with tabs[1]:
                 fig.update_yaxes(title="Avg Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
 
-            st.subheader("Property / Landowner Comparison")
+            st.subheader("Landowner / Property Performance")
 
             property_perf = (
                 comparable.groupby("Organization")
@@ -911,15 +736,17 @@ with tabs[1]:
             fig.update_yaxes(title="Avg Visitors")
             st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
 
-            property_table = property_perf.rename(columns={
-                "Organization": "Landowner / Property",
-                "AvgVisitors": "Avg Visitors",
-                "TotalVisitors": "Total Visitors",
-                "AvgVolunteers": "Avg Volunteers",
-                "YouthParticipants": "Youth / Family Participants",
-            }).round(1)
-
-            st.dataframe(property_table, use_container_width=True, hide_index=True)
+            st.dataframe(
+                property_perf.rename(columns={
+                    "Organization": "Landowner / Property",
+                    "AvgVisitors": "Avg Visitors",
+                    "TotalVisitors": "Total Visitors",
+                    "AvgVolunteers": "Avg Volunteers",
+                    "YouthParticipants": "Youth / Family Participants",
+                }).round(1),
+                use_container_width=True,
+                hide_index=True,
+            )
 
             st.subheader("Similar Past Activities")
 
@@ -950,11 +777,7 @@ with tabs[1]:
                 "VolunteerHours": "Volunteer Hours",
             })
 
-            st.dataframe(
-                similar_table.head(25),
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(similar_table.head(25), use_container_width=True, hide_index=True)
 
             st.subheader("Planning Summary")
 
@@ -965,34 +788,20 @@ with tabs[1]:
             summary_parts = []
 
             if not best_month.empty:
-                summary_parts.append(
-                    f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**"
-                )
+                summary_parts.append(f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**")
 
             if not best_day.empty:
-                summary_parts.append(
-                    f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**"
-                )
+                summary_parts.append(f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**")
 
             if not best_property.empty:
-                summary_parts.append(
-                    f"Best property based on similar activities: **{best_property.iloc[0]['Organization']}**"
-                )
+                summary_parts.append(f"Best landowner/property based on similar activities: **{best_property.iloc[0]['Organization']}**")
 
-            summary_parts.append(
-                f"Expected average attendance: **{scenario_avg:.1f} visitors**"
-            )
-
-            summary_parts.append(
-                f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**"
-            )
-
-            summary_parts.append(
-                f"Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**"
-            )
+            summary_parts.append(f"Expected average attendance: **{scenario_avg:.1f} visitors**")
+            summary_parts.append(f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**")
+            summary_parts.append(f"Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**")
 
             st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
 
             st.info(
-                "This section can later become a short planning summary or report-style output for Kelley when reviewing a proposed activity."
+                "This section can later become a short planning summary for Kelley when reviewing a proposed activity."
             )
