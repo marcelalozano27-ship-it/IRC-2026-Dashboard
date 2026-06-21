@@ -7,7 +7,7 @@ import plotly.express as px
 import streamlit as st
 
 
-st.set_page_config(page_title="IRC Activity Planning Dashboard", layout="wide")
+st.set_page_config(page_title="IRC Program Performance & Activity Planning Dashboard", layout="wide")
 
 SHARED_PASSWORD = "lgo2026"
 
@@ -19,7 +19,7 @@ def check_password():
     if st.session_state["authenticated"]:
         return True
 
-    st.title("IRC Activity Planning Dashboard")
+    st.title("IRC Program Performance & Activity Planning Dashboard")
     st.caption("Please enter the shared password to access the dashboard.")
 
     password = st.text_input("Password", type="password")
@@ -72,7 +72,7 @@ def pct(value):
 def clean_fig(fig, height=500):
     fig.update_layout(
         height=height,
-        margin=dict(l=20, r=20, t=60, b=100),
+        margin=dict(l=20, r=20, t=60, b=80),
         legend_title_text="",
     )
     return fig
@@ -115,28 +115,20 @@ def create_program_group(name):
 
     if "trail running" in text:
         return "Trail Running"
-
     if "hike" in text or "hiking" in text or "trek" in text or "walk" in text:
         return "Hikes"
-
     if "zumba" in text:
         return "Zumba"
-
     if "yoga" in text or "tai chi" in text or "meditative" in text:
         return "Yoga / Wellness"
-
     if "mountain bike" in text or "bike ride" in text or "bike clinic" in text or "freeks ride" in text:
         return "Mountain Biking"
-
     if "equestrian" in text or "training ride" in text:
         return "Equestrian Programs"
-
     if "wilderness access day" in text:
         return "Wilderness Access Days"
-
     if "friends family day" in text or "friends and family day" in text:
         return "Friends & Family Days"
-
     if (
         "native seed farm" in text
         or "seed processing" in text
@@ -146,58 +138,40 @@ def create_program_group(name):
         or "farm steward" in text
     ):
         return "Native Seed Farm"
-
     if "native plant nursery" in text or "plant nursery" in text:
         return "Native Plant Nursery"
-
     if "watering" in text or "water trough" in text:
         return "Watering / Plant Care"
-
     if "invasive" in text or "restoration" in text or "weed" in text or "open space invaders" in text:
         return "Habitat Restoration"
-
     if "trail crew" in text or "trail work" in text:
         return "Trail Crew / Trail Work"
-
     if "camera" in text or "science camera" in text:
         return "Camera Monitoring"
-
     if "bird" in text:
         return "Birding / Bird Monitoring"
-
     if "butterfly" in text or "butterflies" in text or "bugs" in text:
         return "Bugs & Butterflies"
-
     if "raptor" in text:
         return "Raptor Monitoring"
-
     if "wildlife" in text or "animal" in text or "tracking" in text:
         return "Wildlife / Animal Programs"
-
     if "fire watch" in text:
         return "Fire Watch"
-
     if "training" in text or "orientation" in text or "workshop" in text or "cpr" in text or "first aid" in text:
         return "Training / Workshops"
-
     if "exploration day" in text:
         return "Exploration Days"
-
     if "nature in your backyard" in text or "nature" in text:
         return "Nature Education"
-
     if "volunteer" in text:
         return "Volunteer Programs"
-
     if "family" in text:
         return "Family Programs"
-
     if "camp" in text:
         return "Camps"
-
     if "photography" in text or "photo" in text:
         return "Photography"
-
     if "star" in text or "astronomy" in text:
         return "Astronomy"
 
@@ -337,15 +311,6 @@ activities["FillRate"] = np.where(
 )
 
 
-st.title("IRC Activity Planning Dashboard")
-st.caption("Sprint 1 prototype for executive reporting and activity planning support.")
-
-st.markdown("""
-This dashboard is organized into two views: an **Executive Dashboard** to summarize IRC's overall program impact, 
-and an **Activity Planning Dashboard** to help evaluate proposed activities using historical performance patterns.
-""")
-
-
 month_order = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -354,16 +319,27 @@ month_order = [
 days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+st.title("IRC Program Performance & Activity Planning Dashboard")
+st.caption("Executive reporting and planning support powered by historical activity patterns.")
+
+st.markdown("""
+This dashboard is organized into two views: an **Executive Dashboard** to summarize IRC's overall program impact, 
+and an **Activity Planning Dashboard** to help evaluate proposed activities using historical performance patterns.
+""")
+
+
 st.sidebar.header("Global Filters")
 st.sidebar.caption("These filters apply to both dashboard tabs.")
 
 filtered = activities.copy()
 
 years = sorted(filtered["Year"].dropna().astype(int).unique())
+default_years = [y for y in years if y >= 2023] if any(y >= 2023 for y in years) else years
+
 selected_years = st.sidebar.multiselect(
     "Year",
     years,
-    default=years,
+    default=default_years,
     key="global_year_filter"
 )
 filtered = filtered[filtered["Year"].isin(selected_years)]
@@ -372,37 +348,57 @@ activity_types = sorted(filtered["ActivityType"].dropna().unique())
 selected_activity_types = st.sidebar.multiselect(
     "Activity Type",
     activity_types,
-    default=activity_types,
-    key="global_activity_type_filter"
+    default=[],
+    key="global_activity_type_filter",
+    placeholder="All activity types"
 )
+
+if not selected_activity_types:
+    selected_activity_types = activity_types
+
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
 program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
 selected_program_groups = st.sidebar.multiselect(
     "Program Group",
     program_groups,
-    default=program_groups,
-    key="global_program_group_filter"
+    default=[],
+    key="global_program_group_filter",
+    placeholder="All program groups"
 )
+
+if not selected_program_groups:
+    selected_program_groups = program_groups
+
 filtered = filtered[filtered["ProgramGroup"].isin(selected_program_groups)]
 
-with st.sidebar.expander("Additional Filters"):
+with st.sidebar.expander("Additional Filters", expanded=False):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
     selected_months = st.multiselect(
         "Month",
         available_months,
-        default=available_months,
-        key="global_month_filter"
+        default=[],
+        key="global_month_filter",
+        placeholder="All months"
     )
+
+    if not selected_months:
+        selected_months = available_months
+
     filtered = filtered[filtered["Month"].isin(selected_months)]
 
     available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
     selected_days = st.multiselect(
         "Day of Week",
         available_days,
-        default=available_days,
-        key="global_day_filter"
+        default=[],
+        key="global_day_filter",
+        placeholder="All days"
     )
+
+    if not selected_days:
+        selected_days = available_days
+
     filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
     family_youth_global = st.selectbox(
@@ -559,18 +555,47 @@ with tabs[0]:
 
             st.dataframe(program_table, use_container_width=True, hide_index=True)
 
-        st.subheader("Draft Report Summary")
+            st.subheader("Key Takeaways")
 
-        st.markdown("""
-        This section can later become a simple leadership report. For now, it summarizes:
+            expansion = scorecard[scorecard["RecommendationCategory"] == "Expansion Opportunity"]
+            review = scorecard[scorecard["RecommendationCategory"] == "Review Supply"]
 
-        - Total activities hosted
-        - Total visitors reached
-        - Volunteer hours generated
-        - Activity types with the strongest participation
-        - Program groups with the strongest performance
-        - Areas that may be worth expanding, monitoring, or reviewing
-        """)
+            top_expansion = expansion.sort_values("AvgVisitors", ascending=False).head(1)
+            top_review = review.sort_values("TotalVisitors", ascending=False).head(1)
+
+            takeaways = []
+
+            if not top_type.empty:
+                takeaways.append(
+                    f"**{top_type.iloc[0]['ActivityType']}** drives the highest overall participation."
+                )
+
+            if not top_program.empty:
+                takeaways.append(
+                    f"**{top_program.iloc[0]['ProgramGroup']}** is the strongest program group by total visitors."
+                )
+
+            if not top_expansion.empty:
+                takeaways.append(
+                    f"**{top_expansion.iloc[0]['ProgramGroup']}** may be an expansion opportunity based on strong average attendance."
+                )
+
+            if not top_review.empty:
+                takeaways.append(
+                    f"**{top_review.iloc[0]['ProgramGroup']}** may need supply review because activity volume is high relative to average attendance."
+                )
+
+            for takeaway in takeaways:
+                st.markdown(f"- {takeaway}")
+
+            st.info("""
+**Recommended Actions**
+
+- Expand programs with high average visitors and limited activity supply.
+- Review programs with high activity volume but lower average attendance.
+- Monitor programs with high no-show rates.
+- Clean up broad categories like **Other / Needs Review** before using them for final planning decisions.
+""")
 
 
 with tabs[1]:
@@ -589,26 +614,31 @@ with tabs[1]:
             planning_types = st.multiselect(
                 "Activity Type",
                 planning_types_options,
-                default=planning_types_options,
-                key="planning_activity_type_filter"
+                default=[],
+                key="planning_activity_type_filter",
+                placeholder="All activity types"
             )
 
-        if planning_types:
-            valid_program_groups = sorted(
-                filtered[
-                    filtered["ActivityType"].isin(planning_types)
-                ]["ProgramGroup"].dropna().unique()
-            )
-        else:
-            valid_program_groups = []
+        if not planning_types:
+            planning_types = planning_types_options
+
+        valid_program_groups = sorted(
+            filtered[
+                filtered["ActivityType"].isin(planning_types)
+            ]["ProgramGroup"].dropna().unique()
+        )
 
         with c2:
             planning_groups = st.multiselect(
                 "Program Group",
                 valid_program_groups,
-                default=valid_program_groups,
-                key="planning_program_group_filter"
+                default=[],
+                key="planning_program_group_filter",
+                placeholder="All program groups"
             )
+
+        if not planning_groups:
+            planning_groups = valid_program_groups
 
         c3, c4 = st.columns(2)
 
@@ -617,18 +647,26 @@ with tabs[1]:
             planning_months = st.multiselect(
                 "Month",
                 planning_month_options,
-                default=planning_month_options,
-                key="planning_month_filter"
+                default=[],
+                key="planning_month_filter",
+                placeholder="All months"
             )
+
+        if not planning_months:
+            planning_months = planning_month_options
 
         with c4:
             planning_day_options = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
             planning_days = st.multiselect(
                 "Day of Week",
                 planning_day_options,
-                default=planning_day_options,
-                key="planning_day_filter"
+                default=[],
+                key="planning_day_filter",
+                placeholder="All days"
             )
+
+        if not planning_days:
+            planning_days = planning_day_options
 
         family_youth_filter = st.selectbox(
             "Family / Youth Participation",
@@ -784,4 +822,4 @@ with tabs[1]:
 
             st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
 
-            st.info("This section can later become a short planning summary for Kelley when reviewing a proposed activity.")
+            st.info("This section can become a short planning summary for Kelley when reviewing a proposed activity.")
