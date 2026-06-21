@@ -40,21 +40,10 @@ if not check_password():
 @st.cache_data
 def load_data():
     activities = pd.read_csv("data/activity_level.csv")
-
-    try:
-        public = pd.read_csv("data/public_signups.csv")
-    except FileNotFoundError:
-        public = pd.DataFrame()
-
-    try:
-        volunteers = pd.read_csv("data/volunteer_signups.csv")
-    except FileNotFoundError:
-        volunteers = pd.DataFrame()
-
-    return activities, public, volunteers
+    return activities
 
 
-activities, public, volunteers = load_data()
+activities = load_data()
 
 
 def ensure_column(df, column, default_value):
@@ -111,71 +100,93 @@ def create_program_group(name):
     text = normalize_activity_text(name)
 
     if not text:
-        return "Other / Needs Review"
+        return "Needs Review"
 
-    if "trail running" in text:
-        return "Trail Running"
-    if "hike" in text or "hiking" in text or "trek" in text or "walk" in text:
+    if any(word in text for word in ["hike", "hiking", "trek", "walk", "moonlight", "sunset"]):
         return "Hikes"
+
+    if "trail running" in text or "trail run" in text:
+        return "Trail Running"
+
     if "zumba" in text:
         return "Zumba"
-    if "yoga" in text or "tai chi" in text or "meditative" in text:
+
+    if any(word in text for word in ["yoga", "tai chi", "meditative", "meditation", "wellness"]):
         return "Yoga / Wellness"
-    if "mountain bike" in text or "bike ride" in text or "bike clinic" in text or "freeks ride" in text:
+
+    if any(word in text for word in ["mountain bike", "bike ride", "bike clinic", "freeks ride", "biking"]):
         return "Mountain Biking"
-    if "equestrian" in text or "training ride" in text:
+
+    if any(word in text for word in ["equestrian", "training ride", "horse"]):
         return "Equestrian Programs"
+
     if "wilderness access day" in text:
         return "Wilderness Access Days"
+
     if "friends family day" in text or "friends and family day" in text:
         return "Friends & Family Days"
-    if (
-        "native seed farm" in text
-        or "seed processing" in text
-        or "seed collection" in text
-        or "harvest" in text
-        or "growing together" in text
-        or "farm steward" in text
-    ):
+
+    if any(word in text for word in [
+        "native seed farm", "seed processing", "seed collection", "harvest",
+        "growing together", "farm steward"
+    ]):
         return "Native Seed Farm"
+
     if "native plant nursery" in text or "plant nursery" in text:
         return "Native Plant Nursery"
-    if "watering" in text or "water trough" in text:
+
+    if any(word in text for word in ["watering", "water trough", "plant care"]):
         return "Watering / Plant Care"
-    if "invasive" in text or "restoration" in text or "weed" in text or "open space invaders" in text:
+
+    if any(word in text for word in ["invasive", "restoration", "weed", "open space invaders", "habitat"]):
         return "Habitat Restoration"
-    if "trail crew" in text or "trail work" in text:
+
+    if "trail crew" in text or "trail work" in text or "trail maintenance" in text:
         return "Trail Crew / Trail Work"
+
     if "camera" in text or "science camera" in text:
         return "Camera Monitoring"
+
     if "bird" in text:
         return "Birding / Bird Monitoring"
+
     if "butterfly" in text or "butterflies" in text or "bugs" in text:
         return "Bugs & Butterflies"
+
     if "raptor" in text:
         return "Raptor Monitoring"
-    if "wildlife" in text or "animal" in text or "tracking" in text:
+
+    if any(word in text for word in ["wildlife", "animal", "tracking"]):
         return "Wildlife / Animal Programs"
+
     if "fire watch" in text:
         return "Fire Watch"
-    if "training" in text or "orientation" in text or "workshop" in text or "cpr" in text or "first aid" in text:
+
+    if any(word in text for word in ["training", "orientation", "workshop", "cpr", "first aid"]):
         return "Training / Workshops"
+
     if "exploration day" in text:
         return "Exploration Days"
-    if "nature in your backyard" in text or "nature" in text:
+
+    if any(word in text for word in ["nature in your backyard", "nature education"]):
         return "Nature Education"
+
     if "volunteer" in text:
         return "Volunteer Programs"
+
     if "family" in text:
         return "Family Programs"
+
     if "camp" in text:
         return "Camps"
+
     if "photography" in text or "photo" in text:
         return "Photography"
+
     if "star" in text or "astronomy" in text:
         return "Astronomy"
 
-    return "Other / Needs Review"
+    return "Needs Review"
 
 
 def build_scorecard(df, group_col="ProgramGroup"):
@@ -216,6 +227,11 @@ def build_scorecard(df, group_col="ProgramGroup"):
         ["Expansion Opportunity", "Review Supply", "Core Program"],
         default="Monitor",
     )
+
+    scorecard.loc[
+        scorecard["ProgramGroup"].eq("Needs Review"),
+        "RecommendationCategory"
+    ] = "Needs Review"
 
     return scorecard.sort_values("TotalVisitors", ascending=False)
 
@@ -258,20 +274,11 @@ activities["MonthNum"] = activities["Date"].dt.month
 activities["DayOfWeek"] = activities["Date"].dt.day_name()
 
 numeric_cols = [
-    "Volunteers",
-    "VolunteerHours",
-    "Staff",
-    "StaffHours",
-    "VisitorsRegistered",
-    "VisitorsNoShow",
-    "VisitorsWalkUp",
-    "VisitorsChildren",
-    "VisitorsRegisteredIrvineResident",
-    "VisitorsRegisteredIrvineNonResident",
-    "TotalVisitors",
-    "TotalGuests",
-    "public_visitor_slots",
-    "Duration",
+    "Volunteers", "VolunteerHours", "Staff", "StaffHours",
+    "VisitorsRegistered", "VisitorsNoShow", "VisitorsWalkUp",
+    "VisitorsChildren", "VisitorsRegisteredIrvineResident",
+    "VisitorsRegisteredIrvineNonResident", "TotalVisitors",
+    "TotalGuests", "public_visitor_slots", "Duration",
 ]
 
 for col in numeric_cols:
@@ -358,6 +365,20 @@ if not selected_activity_types:
 
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
+sub_activity_types = sorted(filtered["ActivitySubType"].dropna().unique())
+selected_sub_activity_types = st.sidebar.multiselect(
+    "Sub Activity Type",
+    sub_activity_types,
+    default=[],
+    key="global_sub_activity_type_filter",
+    placeholder="All sub activity types"
+)
+
+if not selected_sub_activity_types:
+    selected_sub_activity_types = sub_activity_types
+
+filtered = filtered[filtered["ActivitySubType"].isin(selected_sub_activity_types)]
+
 program_groups = sorted(filtered["ProgramGroup"].dropna().unique())
 selected_program_groups = st.sidebar.multiselect(
     "Program Group",
@@ -399,8 +420,6 @@ with st.sidebar.expander("Additional Filters", expanded=False):
     if not selected_days:
         selected_days = available_days
 
-    filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
-
     family_youth_global = st.selectbox(
         "Family / Youth Participation",
         ["All", "Historically included children", "No recorded child participation"],
@@ -415,7 +434,7 @@ with st.sidebar.expander("Additional Filters", expanded=False):
 
 scorecard = build_scorecard(filtered)
 
-tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
+tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard", "Data Review"])
 
 
 with tabs[0]:
@@ -444,7 +463,8 @@ with tabs[0]:
         )
 
         top_program = (
-            filtered.groupby("ProgramGroup")
+            filtered[filtered["ProgramGroup"] != "Needs Review"]
+            .groupby("ProgramGroup")
             .agg(TotalVisitors=("TotalVisitors", "sum"))
             .reset_index()
             .sort_values("TotalVisitors", ascending=False)
@@ -524,6 +544,10 @@ with tabs[0]:
             fig.update_yaxes(title="Program Group")
             st.plotly_chart(clean_fig(fig, 550), use_container_width=True)
 
+            st.caption(
+                "Note: 'Needs Review' includes activities that could not be confidently mapped to a program group based on the current rule-based mapping."
+            )
+
             program_table = scorecard[[
                 "ProgramGroup",
                 "RecommendationCategory",
@@ -563,30 +587,21 @@ with tabs[0]:
             top_expansion = expansion.sort_values("AvgVisitors", ascending=False).head(1)
             top_review = review.sort_values("TotalVisitors", ascending=False).head(1)
 
-            takeaways = []
-
             if not top_type.empty:
-                takeaways.append(
-                    f"**{top_type.iloc[0]['ActivityType']}** drives the highest overall participation."
-                )
+                st.markdown(f"- **{top_type.iloc[0]['ActivityType']}** drives the highest overall participation.")
 
             if not top_program.empty:
-                takeaways.append(
-                    f"**{top_program.iloc[0]['ProgramGroup']}** is the strongest program group by total visitors."
-                )
+                st.markdown(f"- **{top_program.iloc[0]['ProgramGroup']}** is the strongest program group by total visitors.")
 
             if not top_expansion.empty:
-                takeaways.append(
-                    f"**{top_expansion.iloc[0]['ProgramGroup']}** may be an expansion opportunity based on strong average attendance."
+                st.markdown(
+                    f"- **{top_expansion.iloc[0]['ProgramGroup']}** may be an expansion opportunity based on strong average attendance."
                 )
 
             if not top_review.empty:
-                takeaways.append(
-                    f"**{top_review.iloc[0]['ProgramGroup']}** may need supply review because activity volume is high relative to average attendance."
+                st.markdown(
+                    f"- **{top_review.iloc[0]['ProgramGroup']}** may need supply review because activity volume is high relative to average attendance."
                 )
-
-            for takeaway in takeaways:
-                st.markdown(f"- {takeaway}")
 
             st.info("""
 **Recommended Actions**
@@ -594,7 +609,7 @@ with tabs[0]:
 - Expand programs with high average visitors and limited activity supply.
 - Review programs with high activity volume but lower average attendance.
 - Monitor programs with high no-show rates.
-- Clean up broad categories like **Other / Needs Review** before using them for final planning decisions.
+- Use the **Data Review** tab to inspect activities currently grouped as **Needs Review**.
 """)
 
 
@@ -610,21 +625,21 @@ with tabs[1]:
         c1, c2 = st.columns(2)
 
         with c1:
-            planning_types_options = sorted(filtered["ActivityType"].dropna().unique())
-            planning_types = st.multiselect(
-                "Activity Type",
-                planning_types_options,
+            planning_subtype_options = sorted(filtered["ActivitySubType"].dropna().unique())
+            planning_subtypes = st.multiselect(
+                "Sub Activity Type",
+                planning_subtype_options,
                 default=[],
-                key="planning_activity_type_filter",
-                placeholder="All activity types"
+                key="planning_sub_activity_type_filter",
+                placeholder="All sub activity types"
             )
 
-        if not planning_types:
-            planning_types = planning_types_options
+        if not planning_subtypes:
+            planning_subtypes = planning_subtype_options
 
         valid_program_groups = sorted(
             filtered[
-                filtered["ActivityType"].isin(planning_types)
+                filtered["ActivitySubType"].isin(planning_subtypes)
             ]["ProgramGroup"].dropna().unique()
         )
 
@@ -675,8 +690,7 @@ with tabs[1]:
         )
 
         comparable = filtered.copy()
-
-        comparable = comparable[comparable["ActivityType"].isin(planning_types)]
+        comparable = comparable[comparable["ActivitySubType"].isin(planning_subtypes)]
         comparable = comparable[comparable["ProgramGroup"].isin(planning_groups)]
         comparable = comparable[comparable["Month"].isin(planning_months)]
         comparable = comparable[comparable["DayOfWeek"].isin(planning_days)]
@@ -719,55 +733,29 @@ with tabs[1]:
             col1, col2 = st.columns(2)
 
             with col1:
-                month_perf = (
-                    comparable.groupby("Month")
-                    .agg(
-                        Activities=("ActivityID", "count"),
-                        AvgVisitors=("TotalVisitors", "mean"),
-                    )
-                    .reset_index()
-                )
+                month_perf = comparable.groupby("Month").agg(
+                    Activities=("ActivityID", "count"),
+                    AvgVisitors=("TotalVisitors", "mean"),
+                ).reset_index()
 
-                month_perf["Month"] = pd.Categorical(
-                    month_perf["Month"],
-                    categories=month_order,
-                    ordered=True
-                )
+                month_perf["Month"] = pd.Categorical(month_perf["Month"], categories=month_order, ordered=True)
                 month_perf = month_perf.sort_values("Month")
 
-                fig = px.bar(
-                    month_perf,
-                    x="Month",
-                    y="AvgVisitors",
-                    title="Average Visitors by Month",
-                )
+                fig = px.bar(month_perf, x="Month", y="AvgVisitors", title="Average Visitors by Month")
                 fig.update_xaxes(title="Month", tickangle=-35)
                 fig.update_yaxes(title="Average Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
 
             with col2:
-                day_perf = (
-                    comparable.groupby("DayOfWeek")
-                    .agg(
-                        Activities=("ActivityID", "count"),
-                        AvgVisitors=("TotalVisitors", "mean"),
-                    )
-                    .reset_index()
-                )
+                day_perf = comparable.groupby("DayOfWeek").agg(
+                    Activities=("ActivityID", "count"),
+                    AvgVisitors=("TotalVisitors", "mean"),
+                ).reset_index()
 
-                day_perf["DayOfWeek"] = pd.Categorical(
-                    day_perf["DayOfWeek"],
-                    categories=days_order,
-                    ordered=True
-                )
+                day_perf["DayOfWeek"] = pd.Categorical(day_perf["DayOfWeek"], categories=days_order, ordered=True)
                 day_perf = day_perf.sort_values("DayOfWeek")
 
-                fig = px.bar(
-                    day_perf,
-                    x="DayOfWeek",
-                    y="AvgVisitors",
-                    title="Average Visitors by Day of Week",
-                )
+                fig = px.bar(day_perf, x="DayOfWeek", y="AvgVisitors", title="Average Visitors by Day of Week")
                 fig.update_xaxes(title="Day of Week", tickangle=-35)
                 fig.update_yaxes(title="Average Visitors")
                 st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
@@ -775,17 +763,9 @@ with tabs[1]:
             st.subheader("Similar Past Activities")
 
             similar_table = comparable[[
-                "Date",
-                "ActivityName",
-                "ActivityType",
-                "ProgramGroup",
-                "Organization",
-                "DayOfWeek",
-                "Month",
-                "TotalVisitors",
-                "VisitorsChildren",
-                "Volunteers",
-                "VolunteerHours",
+                "Date", "ActivityName", "ActivityType", "ActivitySubType",
+                "ProgramGroup", "Organization", "DayOfWeek", "Month",
+                "TotalVisitors", "VisitorsChildren", "Volunteers", "VolunteerHours",
             ]].copy()
 
             similar_table = similar_table.sort_values("TotalVisitors", ascending=False)
@@ -793,6 +773,7 @@ with tabs[1]:
             similar_table = similar_table.rename(columns={
                 "ActivityName": "Activity Name",
                 "ActivityType": "Activity Type",
+                "ActivitySubType": "Sub Activity Type",
                 "ProgramGroup": "Program Group",
                 "Organization": "Organization",
                 "DayOfWeek": "Day",
@@ -823,3 +804,43 @@ with tabs[1]:
             st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
 
             st.info("This section can become a short planning summary for Kelley when reviewing a proposed activity.")
+
+
+with tabs[2]:
+    st.header("Data Review")
+    st.caption("Review activities that could not be confidently mapped to a program group.")
+
+    review_df = filtered[filtered["ProgramGroup"] == "Needs Review"].copy()
+
+    if review_df.empty:
+        st.success("No activities currently require program group review under the selected filters.")
+    else:
+        st.info(
+            f"{len(review_df):,} activities are currently marked as **Needs Review**. "
+            "These should be reviewed before finalizing program group reporting."
+        )
+
+        review_summary = (
+            review_df.groupby(["ActivityType", "ActivitySubType"])
+            .agg(
+                Activities=("ActivityID", "count"),
+                TotalVisitors=("TotalVisitors", "sum"),
+                AvgVisitors=("TotalVisitors", "mean"),
+            )
+            .reset_index()
+            .sort_values("Activities", ascending=False)
+        )
+
+        st.subheader("Needs Review Summary")
+        st.dataframe(review_summary, use_container_width=True, hide_index=True)
+
+        st.subheader("Activity Names Needing Review")
+
+        name_counts = (
+            review_df["ActivityName"]
+            .value_counts()
+            .reset_index()
+            .rename(columns={"index": "Activity Name", "ActivityName": "Count"})
+        )
+
+        st.dataframe(name_counts.head(100), use_container_width=True, hide_index=True)
