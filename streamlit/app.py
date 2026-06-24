@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-
+F
 
 st.set_page_config(
     page_title="IRC Program Performance & Activity Planning Dashboard",
@@ -14,7 +14,7 @@ st.set_page_config(
 
 SHARED_PASSWORD = "lgo2026"
 
-
+F
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
@@ -101,16 +101,20 @@ def normalize_activity_text(name):
 def select_all_multiselect(label, options, key, default_select_all=True):
     options = list(options)
 
+    select_all = st.sidebar.checkbox(
+        f"Select all {label}",
+        value=default_select_all,
+        key=f"{key}_select_all"
+    )
+
     selected = st.sidebar.multiselect(
         label,
         options,
-        default=options if default_select_all else [],
+        default=options if select_all else [],
         key=key
     )
 
-    return selected
-
-
+    return options if select_all else selected
 def create_sub_activity_type(row):
     text = normalize_activity_text(row["ActivityName"])
     activity_type = str(row["ActivityType"]).lower()
