@@ -14,6 +14,7 @@ st.set_page_config(
 
 SHARED_PASSWORD = "lgo2026"
 
+
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
@@ -68,6 +69,19 @@ def clean_fig(fig, height=500):
     return fig
 
 
+def select_all_multiselect(label, options, key, default_select_all=True):
+    options = list(options)
+
+    selected = st.sidebar.multiselect(
+        label,
+        options,
+        default=options if default_select_all else [],
+        key=key
+    )
+
+    return selected
+
+
 def normalize_activity_text(name):
     text = html.unescape(str(name)).lower()
 
@@ -97,17 +111,6 @@ def normalize_activity_text(name):
     return text
 
 
-def select_all_multiselect(label, options, key, default_select_all=True):
-    options = list(options)
-
-    selected = st.sidebar.multiselect(
-        label,
-        options,
-        default=options if default_select_all else [],
-        key=key
-    )
-
-    return selected
 def create_sub_activity_type(row):
     text = normalize_activity_text(row["ActivityName"])
     activity_type = str(row["ActivityType"]).lower()
@@ -355,74 +358,76 @@ and an **Activity Planning Dashboard** to help evaluate proposed activities usin
 
 
 st.sidebar.header("Global Filters")
-st.sidebar.caption("These filters apply to both dashboard tabs.")
+st.sidebar.caption("These filters apply to the Executive Dashboard only.")
 
-filtered = activities.copy()
+exec_filtered = activities.copy()
 
-years = sorted(filtered["Year"].dropna().astype(int).unique())
+years = sorted(exec_filtered["Year"].dropna().astype(int).unique())
 selected_years = select_all_multiselect(
     "Year",
     years,
     key="global_year_filter",
     default_select_all=True
 )
-filtered = filtered[filtered["Year"].isin(selected_years)]
+exec_filtered = exec_filtered[exec_filtered["Year"].isin(selected_years)]
 
-activity_types = sorted(filtered["ActivityType"].dropna().unique())
+activity_types = sorted(exec_filtered["ActivityType"].dropna().unique())
 selected_activity_types = select_all_multiselect(
     "Activity Type",
     activity_types,
     key="global_activity_type_filter",
     default_select_all=True
 )
-filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
+exec_filtered = exec_filtered[exec_filtered["ActivityType"].isin(selected_activity_types)]
 
-sub_activity_types = sorted(filtered["SubActivityType"].dropna().unique())
+sub_activity_types = sorted(exec_filtered["SubActivityType"].dropna().unique())
 selected_sub_activity_types = select_all_multiselect(
     "Sub Activity Type",
     sub_activity_types,
     key="global_sub_activity_type_filter",
     default_select_all=True
 )
-filtered = filtered[filtered["SubActivityType"].isin(selected_sub_activity_types)]
+exec_filtered = exec_filtered[exec_filtered["SubActivityType"].isin(selected_sub_activity_types)]
 
 with st.sidebar.expander("Additional Filters", expanded=False):
-    available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
+    available_months = [m for m in month_order if m in exec_filtered["Month"].dropna().unique()]
     selected_months = select_all_multiselect(
         "Month",
         available_months,
         key="global_month_filter",
         default_select_all=True
     )
-    filtered = filtered[filtered["Month"].isin(selected_months)]
+    exec_filtered = exec_filtered[exec_filtered["Month"].isin(selected_months)]
 
-    available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
+    available_days = [d for d in days_order if d in exec_filtered["DayOfWeek"].dropna().unique()]
     selected_days = select_all_multiselect(
         "Day of Week",
         available_days,
         key="global_day_filter",
         default_select_all=True
     )
-    filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
+    exec_filtered = exec_filtered[exec_filtered["DayOfWeek"].isin(selected_days)]
 
-    family_youth_global = st.selectbox(
+    family_youth_global = st.sidebar.selectbox(
         "Family / Youth Participation",
         ["All", "Historically included children", "No recorded child participation"],
         key="global_family_youth_filter"
     )
 
     if family_youth_global == "Historically included children":
-        filtered = filtered[filtered["VisitorsChildren"] > 0]
+        exec_filtered = exec_filtered[exec_filtered["VisitorsChildren"] > 0]
     elif family_youth_global == "No recorded child participation":
-        filtered = filtered[filtered["VisitorsChildren"] == 0]
+        exec_filtered = exec_filtered[exec_filtered["VisitorsChildren"] == 0]
 
 
-scorecard = build_scorecard(filtered)
+scorecard = build_scorecard(exec_filtered)
 
 tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard", "Data Review"])
 
 
 with tabs[0]:
+    filtered = exec_filtered
+
     st.header("Executive Dashboard")
     st.caption("A high-level view of what IRC accomplished.")
 
@@ -565,102 +570,79 @@ with tabs[0]:
                 "Note: Sub Activity Type is derived from activity names because the raw ActivitySubType field is mostly listed as Unknown."
             )
 
-            st.subheader("Key Takeaways")
-
-            expansion = scorecard[scorecard["RecommendationCategory"] == "Expansion Opportunity"]
-            review = scorecard[scorecard["RecommendationCategory"] == "Review Supply"]
-
-            top_expansion = expansion.sort_values("AvgVisitors", ascending=False).head(1)
-            top_review = review.sort_values("TotalVisitors", ascending=False).head(1)
-
-            if not top_type.empty:
-                st.markdown(f"- **{top_type.iloc[0]['ActivityType']}** drives the highest overall participation.")
-
-            if not top_subtype.empty:
-                st.markdown(f"- **{top_subtype.iloc[0]['SubActivityType']}** is the strongest sub activity type by total visitors.")
-
-            if not top_expansion.empty:
-                st.markdown(f"- **{top_expansion.iloc[0]['SubActivityType']}** may be an expansion opportunity based on strong average attendance.")
-
-            if not top_review.empty:
-                st.markdown(f"- **{top_review.iloc[0]['SubActivityType']}** may need supply review because activity volume is high relative to average attendance.")
-
-            st.info("""
-**Recommended Actions**
-
-- Expand sub activity types with high average visitors and limited activity supply.
-- Review sub activity types with high activity volume but lower average attendance.
-- Monitor sub activity types with high no-show rates.
-- Use Activity Type for broad reporting and Sub Activity Type for planning decisions.
-""")
-
 
 with tabs[1]:
     st.header("Activity Planning Dashboard")
-    st.caption("Use historical data to understand how similar activities have performed in the past.")
+    st.caption("Build a proposed activity scenario using historical performance patterns.")
 
-    if filtered.empty:
-        st.warning("No data available for the selected filters.")
+    st.subheader("Proposed Activity Scenario")
+
+    planning_base = activities.copy()
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        planning_activity_type = st.selectbox(
+            "Activity Type",
+            ["Select an activity type"] + sorted(planning_base["ActivityType"].dropna().unique().tolist()),
+            key="planning_activity_type_single"
+        )
+
+    if planning_activity_type != "Select an activity type":
+        subtype_options = sorted(
+            planning_base[
+                planning_base["ActivityType"] == planning_activity_type
+            ]["SubActivityType"].dropna().unique().tolist()
+        )
+    else:
+        subtype_options = []
+
+    with c2:
+        planning_subtype = st.selectbox(
+            "Sub Activity Type",
+            ["Select a sub activity type"] + subtype_options,
+            key="planning_subtype_single"
+        )
+
+    c3, c4 = st.columns(2)
+
+    with c3:
+        planning_month = st.selectbox(
+            "Month",
+            ["Select a month"] + month_order,
+            key="planning_month_single"
+        )
+
+    with c4:
+        planning_day = st.selectbox(
+            "Day of Week",
+            ["Select a day"] + days_order,
+            key="planning_day_single"
+        )
+
+    family_youth_filter = st.selectbox(
+        "Family / Youth Participation",
+        ["All", "Historically included children", "No recorded child participation"],
+        key="planning_family_youth_single"
+    )
+
+    scenario_ready = (
+        planning_activity_type != "Select an activity type"
+        and planning_subtype != "Select a sub activity type"
+        and planning_month != "Select a month"
+        and planning_day != "Select a day"
+    )
+
+    if not scenario_ready:
+        st.info("Select an activity type, sub activity type, month, and day of week to generate a planning summary.")
 
     else:
-        st.subheader("Proposed Activity Scenario")
+        comparable = planning_base.copy()
 
-        c1, c2 = st.columns(2)
-
-        with c1:
-            planning_activity_options = sorted(filtered["ActivityType"].dropna().unique())
-            planning_activity_types = select_all_multiselect(
-                "Activity Type",
-                planning_activity_options,
-                key="planning_activity_type_filter",
-                default_select_all=True
-            )
-
-        valid_subtypes = sorted(
-            filtered[
-                filtered["ActivityType"].isin(planning_activity_types)
-            ]["SubActivityType"].dropna().unique()
-        )
-
-        with c2:
-            planning_subtypes = select_all_multiselect(
-                "Sub Activity Type",
-                valid_subtypes,
-                key="planning_sub_activity_type_filter",
-                default_select_all=True
-            )
-
-        c3, c4 = st.columns(2)
-
-        with c3:
-            planning_month_options = [m for m in month_order if m in filtered["Month"].dropna().unique()]
-            planning_months = select_all_multiselect(
-                "Month",
-                planning_month_options,
-                key="planning_month_filter",
-                default_select_all=True
-            )
-
-        with c4:
-            planning_day_options = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
-            planning_days = select_all_multiselect(
-                "Day of Week",
-                planning_day_options,
-                key="planning_day_filter",
-                default_select_all=True
-            )
-
-        family_youth_filter = st.selectbox(
-            "Family / Youth Participation",
-            ["All", "Historically included children", "No recorded child participation"],
-            key="planning_family_youth_filter"
-        )
-
-        comparable = filtered.copy()
-        comparable = comparable[comparable["ActivityType"].isin(planning_activity_types)]
-        comparable = comparable[comparable["SubActivityType"].isin(planning_subtypes)]
-        comparable = comparable[comparable["Month"].isin(planning_months)]
-        comparable = comparable[comparable["DayOfWeek"].isin(planning_days)]
+        comparable = comparable[comparable["ActivityType"] == planning_activity_type]
+        comparable = comparable[comparable["SubActivityType"] == planning_subtype]
+        comparable = comparable[comparable["Month"] == planning_month]
+        comparable = comparable[comparable["DayOfWeek"] == planning_day]
 
         if family_youth_filter == "Historically included children":
             comparable = comparable[comparable["VisitorsChildren"] > 0]
@@ -670,10 +652,10 @@ with tabs[1]:
         st.subheader("Performance Based on Similar Past Activities")
 
         if comparable.empty:
-            st.warning("No similar past activities match this scenario. Try removing one or more filters.")
+            st.warning("No similar past activities match this exact scenario. Try changing the month or day of week.")
 
         else:
-            overall_avg = filtered["TotalVisitors"].mean()
+            overall_avg = planning_base["TotalVisitors"].mean()
             scenario_avg = comparable["TotalVisitors"].mean()
 
             col1, col2, col3, col4 = st.columns(4)
@@ -685,74 +667,16 @@ with tabs[1]:
 
             if scenario_avg > overall_avg:
                 st.success(
-                    f"Similar activities performed **above the current dashboard average** "
+                    f"Similar activities performed **above the historical average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             elif scenario_avg < overall_avg:
                 st.warning(
-                    f"Similar activities performed **below the current dashboard average** "
+                    f"Similar activities performed **below the historical average** "
                     f"({scenario_avg:.1f} vs. {overall_avg:.1f} visitors per activity)."
                 )
             else:
-                st.info("This scenario performs close to the dashboard average.")
-
-            st.subheader("Best Timing Patterns")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                month_perf = (
-                    comparable.groupby("Month")
-                    .agg(
-                        Activities=("ActivityID", "count"),
-                        AvgVisitors=("TotalVisitors", "mean"),
-                    )
-                    .reset_index()
-                )
-
-                month_perf["Month"] = pd.Categorical(
-                    month_perf["Month"],
-                    categories=month_order,
-                    ordered=True
-                )
-                month_perf = month_perf.sort_values("Month")
-
-                fig = px.bar(
-                    month_perf,
-                    x="Month",
-                    y="AvgVisitors",
-                    title="Average Visitors by Month",
-                )
-                fig.update_xaxes(title="Month", tickangle=-35)
-                fig.update_yaxes(title="Average Visitors")
-                st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
-
-            with col2:
-                day_perf = (
-                    comparable.groupby("DayOfWeek")
-                    .agg(
-                        Activities=("ActivityID", "count"),
-                        AvgVisitors=("TotalVisitors", "mean"),
-                    )
-                    .reset_index()
-                )
-
-                day_perf["DayOfWeek"] = pd.Categorical(
-                    day_perf["DayOfWeek"],
-                    categories=days_order,
-                    ordered=True
-                )
-                day_perf = day_perf.sort_values("DayOfWeek")
-
-                fig = px.bar(
-                    day_perf,
-                    x="DayOfWeek",
-                    y="AvgVisitors",
-                    title="Average Visitors by Day of Week",
-                )
-                fig.update_xaxes(title="Day of Week", tickangle=-35)
-                fig.update_yaxes(title="Average Visitors")
-                st.plotly_chart(clean_fig(fig, 430), use_container_width=True)
+                st.info("This scenario performs close to the historical average.")
 
             st.subheader("Similar Past Activities")
 
@@ -787,34 +711,24 @@ with tabs[1]:
 
             st.subheader("Planning Summary")
 
-            best_month = month_perf.sort_values("AvgVisitors", ascending=False).head(1)
-            best_day = day_perf.sort_values("AvgVisitors", ascending=False).head(1)
-
-            summary_parts = []
-
-            if not best_month.empty:
-                summary_parts.append(f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**")
-
-            if not best_day.empty:
-                summary_parts.append(f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**")
-
-            summary_parts.append(f"Expected average attendance: **{scenario_avg:.1f} visitors**")
-            summary_parts.append(f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**")
-            summary_parts.append(f"Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**")
-
-            st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
-
-            st.info("This section can become a short planning summary for Kelley when reviewing a proposed activity.")
+            st.markdown(f"""
+- Proposed activity type: **{planning_activity_type}**
+- Proposed sub activity type: **{planning_subtype}**
+- Proposed timing: **{planning_day} in {planning_month}**
+- Expected average attendance: **{scenario_avg:.1f} visitors**
+- Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**
+- Expected youth/family participation: **{comparable['VisitorsChildren'].mean():.1f} participants**
+""")
 
 
 with tabs[2]:
     st.header("Data Review")
     st.caption("Review activities that could not be confidently mapped to a sub activity type.")
 
-    review_df = filtered[filtered["SubActivityType"] == "Needs Review"].copy()
+    review_df = activities[activities["SubActivityType"] == "Needs Review"].copy()
 
     if review_df.empty:
-        st.success("No activities currently require review under the selected filters.")
+        st.success("No activities currently require review.")
     else:
         st.info(
             f"{len(review_df):,} activities are currently marked as **Needs Review**. "
