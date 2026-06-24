@@ -107,9 +107,12 @@ def create_sub_activity_type(name):
     if "trail running" in text or "trail run" in text:
         return "Trail Running"
 
-    if any(word in text for word in ["hike", "hiking", "trek", "walk", "moonlight", "sunset"]):
-        return "Hikes"
-
+     if any(word in text for word in [
+        "hike", "hiking", "trek", "walk", "moonlight", "sunset",
+        "tour", "canyon", "trail assessment", "patrol", "sinks",
+        "vistas", "portola", "weir", "fremont", "mini moab"
+    ]):
+    return "Hikes"
     if "zumba" in text:
         return "Zumba"
 
