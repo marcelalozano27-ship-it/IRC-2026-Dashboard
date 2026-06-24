@@ -112,7 +112,7 @@ def create_sub_activity_type(name):
         "tour", "canyon", "trail assessment", "patrol", "sinks",
         "vistas", "portola", "weir", "fremont", "mini moab"
     ]):
-    return "Hikes"
+        return "Hikes"
     if "zumba" in text:
         return "Zumba"
 
