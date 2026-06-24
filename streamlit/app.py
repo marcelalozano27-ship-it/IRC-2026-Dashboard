@@ -71,14 +71,12 @@ def clean_fig(fig, height=500):
 
 def select_all_multiselect(label, options, key, default_select_all=True):
     options = list(options)
-
     selected = st.sidebar.multiselect(
         label,
         options,
         default=options if default_select_all else [],
         key=key
     )
-
     return selected
 
 
@@ -363,49 +361,24 @@ st.sidebar.caption("These filters apply to the Executive Dashboard only.")
 exec_filtered = activities.copy()
 
 years = sorted(exec_filtered["Year"].dropna().astype(int).unique())
-selected_years = select_all_multiselect(
-    "Year",
-    years,
-    key="global_year_filter",
-    default_select_all=True
-)
+selected_years = select_all_multiselect("Year", years, key="global_year_filter")
 exec_filtered = exec_filtered[exec_filtered["Year"].isin(selected_years)]
 
 activity_types = sorted(exec_filtered["ActivityType"].dropna().unique())
-selected_activity_types = select_all_multiselect(
-    "Activity Type",
-    activity_types,
-    key="global_activity_type_filter",
-    default_select_all=True
-)
+selected_activity_types = select_all_multiselect("Activity Type", activity_types, key="global_activity_type_filter")
 exec_filtered = exec_filtered[exec_filtered["ActivityType"].isin(selected_activity_types)]
 
 sub_activity_types = sorted(exec_filtered["SubActivityType"].dropna().unique())
-selected_sub_activity_types = select_all_multiselect(
-    "Sub Activity Type",
-    sub_activity_types,
-    key="global_sub_activity_type_filter",
-    default_select_all=True
-)
+selected_sub_activity_types = select_all_multiselect("Sub Activity Type", sub_activity_types, key="global_sub_activity_type_filter")
 exec_filtered = exec_filtered[exec_filtered["SubActivityType"].isin(selected_sub_activity_types)]
 
 with st.sidebar.expander("Additional Filters", expanded=False):
     available_months = [m for m in month_order if m in exec_filtered["Month"].dropna().unique()]
-    selected_months = select_all_multiselect(
-        "Month",
-        available_months,
-        key="global_month_filter",
-        default_select_all=True
-    )
+    selected_months = select_all_multiselect("Month", available_months, key="global_month_filter")
     exec_filtered = exec_filtered[exec_filtered["Month"].isin(selected_months)]
 
     available_days = [d for d in days_order if d in exec_filtered["DayOfWeek"].dropna().unique()]
-    selected_days = select_all_multiselect(
-        "Day of Week",
-        available_days,
-        key="global_day_filter",
-        default_select_all=True
-    )
+    selected_days = select_all_multiselect("Day of Week", available_days, key="global_day_filter")
     exec_filtered = exec_filtered[exec_filtered["DayOfWeek"].isin(selected_days)]
 
     family_youth_global = st.sidebar.selectbox(
@@ -433,7 +406,6 @@ with tabs[0]:
 
     if filtered.empty:
         st.warning("No data available for the selected filters.")
-
     else:
         col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -445,13 +417,7 @@ with tabs[0]:
 
         st.subheader("Executive Summary")
 
-        top_type = (
-            filtered.groupby("ActivityType")
-            .agg(TotalVisitors=("TotalVisitors", "sum"))
-            .reset_index()
-            .sort_values("TotalVisitors", ascending=False)
-            .head(1)
-        )
+        top_type = filtered.groupby("ActivityType").agg(TotalVisitors=("TotalVisitors", "sum")).reset_index().sort_values("TotalVisitors", ascending=False).head(1)
 
         top_subtype = (
             filtered[filtered["SubActivityType"] != "Needs Review"]
@@ -474,44 +440,16 @@ with tabs[0]:
 
         with col1:
             st.subheader("Activities by Activity Type")
-
-            type_activity = (
-                filtered.groupby("ActivityType")
-                .agg(Activities=("ActivityID", "count"))
-                .reset_index()
-                .sort_values("Activities", ascending=True)
-                .tail(12)
-            )
-
-            fig = px.bar(
-                type_activity,
-                x="Activities",
-                y="ActivityType",
-                orientation="h",
-                title="Number of Activities by Activity Type",
-            )
+            type_activity = filtered.groupby("ActivityType").agg(Activities=("ActivityID", "count")).reset_index().sort_values("Activities", ascending=True).tail(12)
+            fig = px.bar(type_activity, x="Activities", y="ActivityType", orientation="h", title="Number of Activities by Activity Type")
             fig.update_xaxes(title="Number of Activities")
             fig.update_yaxes(title="Activity Type")
             st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
 
         with col2:
             st.subheader("Visitors by Activity Type")
-
-            type_visitors = (
-                filtered.groupby("ActivityType")
-                .agg(TotalVisitors=("TotalVisitors", "sum"))
-                .reset_index()
-                .sort_values("TotalVisitors", ascending=True)
-                .tail(12)
-            )
-
-            fig = px.bar(
-                type_visitors,
-                x="TotalVisitors",
-                y="ActivityType",
-                orientation="h",
-                title="Total Visitors by Activity Type",
-            )
+            type_visitors = filtered.groupby("ActivityType").agg(TotalVisitors=("TotalVisitors", "sum")).reset_index().sort_values("TotalVisitors", ascending=True).tail(12)
+            fig = px.bar(type_visitors, x="TotalVisitors", y="ActivityType", orientation="h", title="Total Visitors by Activity Type")
             fig.update_xaxes(title="Total Visitors")
             fig.update_yaxes(title="Activity Type")
             st.plotly_chart(clean_fig(fig, 500), use_container_width=True)
@@ -522,29 +460,15 @@ with tabs[0]:
             st.info("No sub activity type data available.")
         else:
             subtype_chart = scorecard.sort_values("TotalVisitors", ascending=True).tail(12)
-
-            fig = px.bar(
-                subtype_chart,
-                x="TotalVisitors",
-                y="SubActivityType",
-                color="RecommendationCategory",
-                orientation="h",
-                title="Top Sub Activity Types by Total Visitors",
-            )
+            fig = px.bar(subtype_chart, x="TotalVisitors", y="SubActivityType", color="RecommendationCategory", orientation="h", title="Top Sub Activity Types by Total Visitors")
             fig.update_xaxes(title="Total Visitors")
             fig.update_yaxes(title="Sub Activity Type")
             st.plotly_chart(clean_fig(fig, 550), use_container_width=True)
 
             subtype_table = scorecard[[
-                "SubActivityType",
-                "RecommendationCategory",
-                "ActivityCount",
-                "TotalVisitors",
-                "AvgVisitors",
-                "VolunteerHours",
-                "YouthParticipants",
-                "AvgFillRate",
-                "AvgNoShowRate",
+                "SubActivityType", "RecommendationCategory", "ActivityCount",
+                "TotalVisitors", "AvgVisitors", "VolunteerHours",
+                "YouthParticipants", "AvgFillRate", "AvgNoShowRate"
             ]].copy()
 
             subtype_table = subtype_table.rename(columns={
@@ -566,10 +490,6 @@ with tabs[0]:
 
             st.dataframe(subtype_table, use_container_width=True, hide_index=True)
 
-            st.caption(
-                "Note: Sub Activity Type is derived from activity names because the raw ActivitySubType field is mostly listed as Unknown."
-            )
-
 
 with tabs[1]:
     st.header("Activity Planning Dashboard")
@@ -590,9 +510,7 @@ with tabs[1]:
 
     if planning_activity_type != "Select an activity type":
         subtype_options = sorted(
-            planning_base[
-                planning_base["ActivityType"] == planning_activity_type
-            ]["SubActivityType"].dropna().unique().tolist()
+            planning_base[planning_base["ActivityType"] == planning_activity_type]["SubActivityType"].dropna().unique().tolist()
         )
     else:
         subtype_options = []
@@ -635,7 +553,6 @@ with tabs[1]:
 
     if not scenario_ready:
         st.info("Select an activity type, sub activity type, month, and day of week to generate a planning summary.")
-
     else:
         comparable = planning_base.copy()
 
@@ -652,7 +569,73 @@ with tabs[1]:
         st.subheader("Performance Based on Similar Past Activities")
 
         if comparable.empty:
-            st.warning("No similar past activities match this exact scenario. Try changing the month or day of week.")
+            st.warning("No exact match found. Showing closest historical matches instead.")
+
+            suggestion_df = planning_base.copy()
+            suggestion_df = suggestion_df[suggestion_df["ActivityType"] == planning_activity_type]
+            suggestion_df = suggestion_df[suggestion_df["SubActivityType"] == planning_subtype]
+
+            if family_youth_filter == "Historically included children":
+                suggestion_df = suggestion_df[suggestion_df["VisitorsChildren"] > 0]
+            elif family_youth_filter == "No recorded child participation":
+                suggestion_df = suggestion_df[suggestion_df["VisitorsChildren"] == 0]
+
+            if suggestion_df.empty:
+                st.info("No past activities match this activity type and sub activity type. Try selecting a broader activity type.")
+            else:
+                closest_summary = (
+                    suggestion_df.groupby(["Month", "DayOfWeek"])
+                    .agg(
+                        SimilarActivities=("ActivityID", "count"),
+                        AvgVisitors=("TotalVisitors", "mean"),
+                        AvgVolunteers=("Volunteers", "mean"),
+                        AvgYouthFamily=("VisitorsChildren", "mean"),
+                    )
+                    .reset_index()
+                    .sort_values("AvgVisitors", ascending=False)
+                )
+
+                st.subheader("Suggested Timing Based on Similar Activities")
+
+                display_summary = closest_summary.head(10).rename(columns={
+                    "DayOfWeek": "Day of Week",
+                    "AvgVisitors": "Avg Visitors",
+                    "AvgVolunteers": "Avg Volunteers",
+                    "AvgYouthFamily": "Avg Youth / Family Participants",
+                })
+
+                display_summary["Avg Visitors"] = display_summary["Avg Visitors"].round(1)
+                display_summary["Avg Volunteers"] = display_summary["Avg Volunteers"].round(1)
+                display_summary["Avg Youth / Family Participants"] = display_summary["Avg Youth / Family Participants"].round(1)
+
+                st.dataframe(display_summary, use_container_width=True, hide_index=True)
+
+                best_match = closest_summary.head(1).iloc[0]
+
+                st.info(
+                    f"Best historical option: **{best_match['DayOfWeek']} in {best_match['Month']}** "
+                    f"with an average of **{best_match['AvgVisitors']:.1f} visitors** "
+                    f"across **{best_match['SimilarActivities']:.0f} similar activities**."
+                )
+
+                st.subheader("Top Historical Examples")
+
+                top_examples = suggestion_df.sort_values("TotalVisitors", ascending=False).head(10)
+
+                example_table = top_examples[[
+                    "ActivityName", "Month", "DayOfWeek", "TotalVisitors",
+                    "VisitorsChildren", "Volunteers", "VolunteerHours"
+                ]].copy()
+
+                example_table = example_table.rename(columns={
+                    "ActivityName": "Activity Name",
+                    "DayOfWeek": "Day",
+                    "TotalVisitors": "Total Visitors",
+                    "VisitorsChildren": "Youth / Family Participants",
+                    "VolunteerHours": "Volunteer Hours",
+                })
+
+                st.dataframe(example_table, use_container_width=True, hide_index=True)
 
         else:
             overall_avg = planning_base["TotalVisitors"].mean()
@@ -681,17 +664,9 @@ with tabs[1]:
             st.subheader("Similar Past Activities")
 
             similar_table = comparable[[
-                "Date",
-                "ActivityName",
-                "ActivityType",
-                "SubActivityType",
-                "Organization",
-                "DayOfWeek",
-                "Month",
-                "TotalVisitors",
-                "VisitorsChildren",
-                "Volunteers",
-                "VolunteerHours",
+                "Date", "ActivityName", "ActivityType", "SubActivityType",
+                "Organization", "DayOfWeek", "Month", "TotalVisitors",
+                "VisitorsChildren", "Volunteers", "VolunteerHours"
             ]].copy()
 
             similar_table = similar_table.sort_values("TotalVisitors", ascending=False)
@@ -700,7 +675,6 @@ with tabs[1]:
                 "ActivityName": "Activity Name",
                 "ActivityType": "Activity Type",
                 "SubActivityType": "Sub Activity Type",
-                "Organization": "Organization",
                 "DayOfWeek": "Day",
                 "TotalVisitors": "Total Visitors",
                 "VisitorsChildren": "Youth / Family Participants",
