@@ -98,44 +98,63 @@ def normalize_activity_text(name):
     return text
 
 
-def create_sub_activity_type(name):
-    text = normalize_activity_text(name)
+def select_all_multiselect(label, options, key, default_select_all=True):
+    options = list(options)
+    select_all_label = "Select All"
+    default = [select_all_label] if default_select_all else []
+
+    selected = st.multiselect(
+        label,
+        [select_all_label] + options,
+        default=default,
+        key=key
+    )
+
+    if select_all_label in selected or not selected:
+        return options
+
+    return [x for x in selected if x != select_all_label]
+
+
+def create_sub_activity_type(row):
+    text = normalize_activity_text(row["ActivityName"])
+    activity_type = str(row["ActivityType"]).lower()
 
     if not text:
         return "Needs Review"
+
+    if activity_type == "hiking & fitness":
+        return "Hikes"
+
+    if activity_type == "fire watch":
+        return "Fire Watch"
+
+    if activity_type == "mountain biking":
+        return "Mountain Biking"
+
+    if activity_type == "equestrian":
+        return "Equestrian Programs"
 
     if "trail running" in text or "trail run" in text:
         return "Trail Running"
 
     if any(word in text for word in [
-        "hike",
-        "hiking",
-        "trek",
-        "walk",
-        "moonlight",
-        "sunset",
-        "tour",
-        "canyon",
-        "trail assessment",
-        "patrol",
-        "sinks",
-        "vistas",
-        "portola",
-        "weir",
-        "fremont",
-        "mini moab"
+        "hike", "hiking", "trek", "walk", "moonlight", "sunset",
+        "tour", "canyon", "trail assessment", "patrol", "sinks",
+        "vistas", "portola", "weir", "fremont", "mini moab"
     ]):
         return "Hikes"
 
     if "zumba" in text:
         return "Zumba"
+
     if any(word in text for word in ["yoga", "tai chi", "meditative", "meditation", "wellness"]):
         return "Yoga / Wellness"
 
-    if any(word in text for word in ["mountain bike", "bike ride", "bike clinic", "freeks ride", "biking"]):
+    if any(word in text for word in ["bike", "biking"]):
         return "Mountain Biking"
 
-    if any(word in text for word in ["equestrian", "training ride", "horse"]):
+    if any(word in text for word in ["equestrian", "horse"]):
         return "Equestrian Programs"
 
     if "wilderness access day" in text:
@@ -176,9 +195,6 @@ def create_sub_activity_type(name):
 
     if any(word in text for word in ["wildlife", "animal", "tracking"]):
         return "Wildlife / Animal Programs"
-
-    if "fire watch" in text:
-        return "Fire Watch"
 
     if any(word in text for word in ["training", "orientation", "workshop", "cpr", "first aid"]):
         return "Training / Workshops"
@@ -262,7 +278,6 @@ required_columns = {
     "ActivityName": "Unknown Activity",
     "Organization": "Unknown",
     "ActivityStatus": "Unknown",
-    "CancelReason": "",
     "Volunteers": 0,
     "VolunteerHours": 0,
     "Staff": 0,
@@ -287,18 +302,10 @@ activities["MonthNum"] = activities["Date"].dt.month
 activities["DayOfWeek"] = activities["Date"].dt.day_name()
 
 numeric_cols = [
-    "Volunteers",
-    "VolunteerHours",
-    "Staff",
-    "StaffHours",
-    "VisitorsRegistered",
-    "VisitorsNoShow",
-    "VisitorsWalkUp",
-    "VisitorsChildren",
-    "TotalVisitors",
-    "TotalGuests",
-    "public_visitor_slots",
-    "Duration",
+    "Volunteers", "VolunteerHours", "Staff", "StaffHours",
+    "VisitorsRegistered", "VisitorsNoShow", "VisitorsWalkUp",
+    "VisitorsChildren", "TotalVisitors", "TotalGuests",
+    "public_visitor_slots", "Duration",
 ]
 
 for col in numeric_cols:
@@ -313,8 +320,7 @@ cancelled_mask = (
 )
 
 activities = activities[~cancelled_mask].copy()
-
-activities["SubActivityType"] = activities["ActivityName"].apply(create_sub_activity_type)
+activities["SubActivityType"] = activities.apply(create_sub_activity_type, axis=1)
 
 activities["ActualVisitors"] = (
     activities["VisitorsRegistered"] - activities["VisitorsNoShow"]
@@ -362,71 +368,50 @@ st.sidebar.caption("These filters apply to both dashboard tabs.")
 filtered = activities.copy()
 
 years = sorted(filtered["Year"].dropna().astype(int).unique())
-default_years = [y for y in years if y >= 2023] if any(y >= 2023 for y in years) else years
-
-selected_years = st.sidebar.multiselect(
+selected_years = select_all_multiselect(
     "Year",
     years,
-    default=default_years,
-    key="global_year_filter"
+    key="global_year_filter",
+    default_select_all=True
 )
-
 filtered = filtered[filtered["Year"].isin(selected_years)]
 
 activity_types = sorted(filtered["ActivityType"].dropna().unique())
-selected_activity_types = st.sidebar.multiselect(
+selected_activity_types = select_all_multiselect(
     "Activity Type",
     activity_types,
-    default=[],
     key="global_activity_type_filter",
-    placeholder="All activity types"
+    default_select_all=True
 )
-
-if not selected_activity_types:
-    selected_activity_types = activity_types
-
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
 sub_activity_types = sorted(filtered["SubActivityType"].dropna().unique())
-selected_sub_activity_types = st.sidebar.multiselect(
+selected_sub_activity_types = select_all_multiselect(
     "Sub Activity Type",
     sub_activity_types,
-    default=[],
     key="global_sub_activity_type_filter",
-    placeholder="All sub activity types"
+    default_select_all=True
 )
-
-if not selected_sub_activity_types:
-    selected_sub_activity_types = sub_activity_types
-
 filtered = filtered[filtered["SubActivityType"].isin(selected_sub_activity_types)]
 
 with st.sidebar.expander("Additional Filters", expanded=False):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
-    selected_months = st.multiselect(
+    selected_months = select_all_multiselect(
         "Month",
         available_months,
-        default=[],
         key="global_month_filter",
-        placeholder="All months"
+        default_select_all=True
     )
-
-    if not selected_months:
-        selected_months = available_months
-
     filtered = filtered[filtered["Month"].isin(selected_months)]
 
     available_days = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
-    selected_days = st.multiselect(
+    selected_days = select_all_multiselect(
         "Day of Week",
         available_days,
-        default=[],
         key="global_day_filter",
-        placeholder="All days"
+        default_select_all=True
     )
-
-    if not selected_days:
-        selected_days = available_days
+    filtered = filtered[filtered["DayOfWeek"].isin(selected_days)]
 
     family_youth_global = st.selectbox(
         "Family / Youth Participation",
@@ -597,24 +582,16 @@ with tabs[0]:
             top_review = review.sort_values("TotalVisitors", ascending=False).head(1)
 
             if not top_type.empty:
-                st.markdown(
-                    f"- **{top_type.iloc[0]['ActivityType']}** drives the highest overall participation."
-                )
+                st.markdown(f"- **{top_type.iloc[0]['ActivityType']}** drives the highest overall participation.")
 
             if not top_subtype.empty:
-                st.markdown(
-                    f"- **{top_subtype.iloc[0]['SubActivityType']}** is the strongest sub activity type by total visitors."
-                )
+                st.markdown(f"- **{top_subtype.iloc[0]['SubActivityType']}** is the strongest sub activity type by total visitors.")
 
             if not top_expansion.empty:
-                st.markdown(
-                    f"- **{top_expansion.iloc[0]['SubActivityType']}** may be an expansion opportunity based on strong average attendance."
-                )
+                st.markdown(f"- **{top_expansion.iloc[0]['SubActivityType']}** may be an expansion opportunity based on strong average attendance.")
 
             if not top_review.empty:
-                st.markdown(
-                    f"- **{top_review.iloc[0]['SubActivityType']}** may need supply review because activity volume is high relative to average attendance."
-                )
+                st.markdown(f"- **{top_review.iloc[0]['SubActivityType']}** may need supply review because activity volume is high relative to average attendance.")
 
             st.info("""
 **Recommended Actions**
@@ -640,16 +617,12 @@ with tabs[1]:
 
         with c1:
             planning_activity_options = sorted(filtered["ActivityType"].dropna().unique())
-            planning_activity_types = st.multiselect(
+            planning_activity_types = select_all_multiselect(
                 "Activity Type",
                 planning_activity_options,
-                default=[],
                 key="planning_activity_type_filter",
-                placeholder="All activity types"
+                default_select_all=True
             )
-
-        if not planning_activity_types:
-            planning_activity_types = planning_activity_options
 
         valid_subtypes = sorted(
             filtered[
@@ -658,44 +631,32 @@ with tabs[1]:
         )
 
         with c2:
-            planning_subtypes = st.multiselect(
+            planning_subtypes = select_all_multiselect(
                 "Sub Activity Type",
                 valid_subtypes,
-                default=[],
                 key="planning_sub_activity_type_filter",
-                placeholder="All sub activity types"
+                default_select_all=True
             )
-
-        if not planning_subtypes:
-            planning_subtypes = valid_subtypes
 
         c3, c4 = st.columns(2)
 
         with c3:
             planning_month_options = [m for m in month_order if m in filtered["Month"].dropna().unique()]
-            planning_months = st.multiselect(
+            planning_months = select_all_multiselect(
                 "Month",
                 planning_month_options,
-                default=[],
                 key="planning_month_filter",
-                placeholder="All months"
+                default_select_all=True
             )
-
-        if not planning_months:
-            planning_months = planning_month_options
 
         with c4:
             planning_day_options = [d for d in days_order if d in filtered["DayOfWeek"].dropna().unique()]
-            planning_days = st.multiselect(
+            planning_days = select_all_multiselect(
                 "Day of Week",
                 planning_day_options,
-                default=[],
                 key="planning_day_filter",
-                placeholder="All days"
+                default_select_all=True
             )
-
-        if not planning_days:
-            planning_days = planning_day_options
 
         family_youth_filter = st.selectbox(
             "Family / Youth Participation",
@@ -704,7 +665,6 @@ with tabs[1]:
         )
 
         comparable = filtered.copy()
-
         comparable = comparable[comparable["ActivityType"].isin(planning_activity_types)]
         comparable = comparable[comparable["SubActivityType"].isin(planning_subtypes)]
         comparable = comparable[comparable["Month"].isin(planning_months)]
@@ -763,7 +723,6 @@ with tabs[1]:
                     categories=month_order,
                     ordered=True
                 )
-
                 month_perf = month_perf.sort_values("Month")
 
                 fig = px.bar(
@@ -791,7 +750,6 @@ with tabs[1]:
                     categories=days_order,
                     ordered=True
                 )
-
                 day_perf = day_perf.sort_values("DayOfWeek")
 
                 fig = px.bar(
@@ -843,14 +801,10 @@ with tabs[1]:
             summary_parts = []
 
             if not best_month.empty:
-                summary_parts.append(
-                    f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**"
-                )
+                summary_parts.append(f"Best month based on similar activities: **{best_month.iloc[0]['Month']}**")
 
             if not best_day.empty:
-                summary_parts.append(
-                    f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**"
-                )
+                summary_parts.append(f"Best day based on similar activities: **{best_day.iloc[0]['DayOfWeek']}**")
 
             summary_parts.append(f"Expected average attendance: **{scenario_avg:.1f} visitors**")
             summary_parts.append(f"Expected average volunteer need: **{comparable['Volunteers'].mean():.1f} volunteers**")
@@ -858,9 +812,7 @@ with tabs[1]:
 
             st.markdown("\n\n".join([f"- {item}" for item in summary_parts]))
 
-            st.info(
-                "This section can become a short planning summary for Kelley when reviewing a proposed activity."
-            )
+            st.info("This section can become a short planning summary for Kelley when reviewing a proposed activity.")
 
 
 with tabs[2]:
