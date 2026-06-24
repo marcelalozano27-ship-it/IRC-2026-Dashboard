@@ -103,7 +103,7 @@ def select_all_multiselect(label, options, key, default_select_all=True):
     select_all_label = "Select All"
     default = [select_all_label] if default_select_all else []
 
-    selected = st.multiselect(
+    selected = st.sidebar.multiselect(
         label,
         [select_all_label] + options,
         default=default,
