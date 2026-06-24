@@ -100,20 +100,15 @@ def normalize_activity_text(name):
 
 def select_all_multiselect(label, options, key, default_select_all=True):
     options = list(options)
-    select_all_label = "Select All"
-    default = [select_all_label] if default_select_all else []
 
     selected = st.sidebar.multiselect(
         label,
-        [select_all_label] + options,
-        default=default,
+        options,
+        default=options if default_select_all else [],
         key=key
     )
 
-    if select_all_label in selected or not selected:
-        return options
-
-    return [x for x in selected if x != select_all_label]
+    return selected
 
 
 def create_sub_activity_type(row):
