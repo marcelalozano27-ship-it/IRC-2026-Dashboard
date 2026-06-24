@@ -100,20 +100,14 @@ def normalize_activity_text(name):
 def select_all_multiselect(label, options, key, default_select_all=True):
     options = list(options)
 
-    select_all = st.sidebar.checkbox(
-        f"Select all {label}",
-        value=default_select_all,
-        key=f"{key}_select_all"
-    )
-
     selected = st.sidebar.multiselect(
         label,
         options,
-        default=options if select_all else [],
+        default=options if default_select_all else [],
         key=key
     )
 
-    return options if select_all else selected
+    return selected
 def create_sub_activity_type(row):
     text = normalize_activity_text(row["ActivityName"])
     activity_type = str(row["ActivityType"]).lower()
