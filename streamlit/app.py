@@ -14,7 +14,6 @@ st.set_page_config(
 
 SHARED_PASSWORD = "lgo2026"
 
-F
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
