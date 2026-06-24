@@ -1,5 +1,8 @@
-import pandas as pd
+import html
+import re
+
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -66,7 +69,129 @@ def clean_fig(fig, height=500):
     return fig
 
 
-def build_scorecard(df, group_col="ActivitySubType"):
+def normalize_activity_text(name):
+    text = html.unescape(str(name)).lower()
+
+    replacements = {
+        "â€™": "'",
+        "â€œ": '"',
+        "â€": '"',
+        "â€“": "-",
+        "â€”": "-",
+        "&amp;": "&",
+    }
+
+    for bad, good in replacements.items():
+        text = text.replace(bad, good)
+
+    text = re.sub(r"(?i)cancelled:|canceled:", "", text)
+    text = re.sub(r"\*+", "", text)
+    text = re.sub(r"\b\d{1,2}\s*(am|pm)\b", "", text)
+    text = re.sub(r"\b20\d{2}\b", "", text)
+    text = re.sub(r"\brth-[a-z0-9\-]+", "", text)
+    text = re.sub(r"\brtn-[a-z0-9\-]+", "", text)
+    text = re.sub(r"\bpef-[a-z0-9\-]+", "", text)
+    text = re.sub(r"\([^)]*\)", "", text)
+    text = re.sub(r"[^a-z0-9\s&]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def create_sub_activity_type(name):
+    text = normalize_activity_text(name)
+
+    if not text:
+        return "Needs Review"
+
+    if "trail running" in text or "trail run" in text:
+        return "Trail Running"
+
+    if any(word in text for word in ["hike", "hiking", "trek", "walk", "moonlight", "sunset"]):
+        return "Hikes"
+
+    if "zumba" in text:
+        return "Zumba"
+
+    if any(word in text for word in ["yoga", "tai chi", "meditative", "meditation", "wellness"]):
+        return "Yoga / Wellness"
+
+    if any(word in text for word in ["mountain bike", "bike ride", "bike clinic", "freeks ride", "biking"]):
+        return "Mountain Biking"
+
+    if any(word in text for word in ["equestrian", "training ride", "horse"]):
+        return "Equestrian Programs"
+
+    if "wilderness access day" in text:
+        return "Wilderness Access Days"
+
+    if "friends family day" in text or "friends and family day" in text:
+        return "Friends & Family Days"
+
+    if any(word in text for word in [
+        "native seed farm", "seed processing", "seed collection", "harvest",
+        "growing together", "farm steward"
+    ]):
+        return "Native Seed Farm"
+
+    if "native plant nursery" in text or "plant nursery" in text:
+        return "Native Plant Nursery"
+
+    if any(word in text for word in ["watering", "water trough", "plant care"]):
+        return "Watering / Plant Care"
+
+    if any(word in text for word in ["invasive", "restoration", "weed", "open space invaders", "habitat"]):
+        return "Habitat Restoration"
+
+    if "trail crew" in text or "trail work" in text or "trail maintenance" in text:
+        return "Trail Crew / Trail Work"
+
+    if "camera" in text or "science camera" in text:
+        return "Camera Monitoring"
+
+    if "bird" in text:
+        return "Birding / Bird Monitoring"
+
+    if "butterfly" in text or "butterflies" in text or "bugs" in text:
+        return "Bugs & Butterflies"
+
+    if "raptor" in text:
+        return "Raptor Monitoring"
+
+    if any(word in text for word in ["wildlife", "animal", "tracking"]):
+        return "Wildlife / Animal Programs"
+
+    if "fire watch" in text:
+        return "Fire Watch"
+
+    if any(word in text for word in ["training", "orientation", "workshop", "cpr", "first aid"]):
+        return "Training / Workshops"
+
+    if "exploration day" in text:
+        return "Exploration Days"
+
+    if any(word in text for word in ["nature in your backyard", "nature education"]):
+        return "Nature Education"
+
+    if "volunteer" in text:
+        return "Volunteer Programs"
+
+    if "family" in text:
+        return "Family Programs"
+
+    if "camp" in text:
+        return "Camps"
+
+    if "photography" in text or "photo" in text:
+        return "Photography"
+
+    if "star" in text or "astronomy" in text:
+        return "Astronomy"
+
+    return "Needs Review"
+
+
+def build_scorecard(df, group_col="SubActivityType"):
     if df.empty:
         return pd.DataFrame()
 
@@ -104,6 +229,11 @@ def build_scorecard(df, group_col="ActivitySubType"):
         ["Expansion Opportunity", "Review Supply", "Core Program"],
         default="Monitor",
     )
+
+    scorecard.loc[
+        scorecard["SubActivityType"].eq("Needs Review"),
+        "RecommendationCategory"
+    ] = "Needs Review"
 
     return scorecard.sort_values("TotalVisitors", ascending=False)
 
@@ -167,6 +297,8 @@ cancelled_mask = (
 )
 
 activities = activities[~cancelled_mask].copy()
+
+activities["SubActivityType"] = activities["ActivityName"].apply(create_sub_activity_type)
 
 activities["ActualVisitors"] = (
     activities["VisitorsRegistered"] - activities["VisitorsNoShow"]
@@ -239,7 +371,7 @@ if not selected_activity_types:
 
 filtered = filtered[filtered["ActivityType"].isin(selected_activity_types)]
 
-sub_activity_types = sorted(filtered["ActivitySubType"].dropna().unique())
+sub_activity_types = sorted(filtered["SubActivityType"].dropna().unique())
 selected_sub_activity_types = st.sidebar.multiselect(
     "Sub Activity Type",
     sub_activity_types,
@@ -251,7 +383,7 @@ selected_sub_activity_types = st.sidebar.multiselect(
 if not selected_sub_activity_types:
     selected_sub_activity_types = sub_activity_types
 
-filtered = filtered[filtered["ActivitySubType"].isin(selected_sub_activity_types)]
+filtered = filtered[filtered["SubActivityType"].isin(selected_sub_activity_types)]
 
 with st.sidebar.expander("Additional Filters", expanded=False):
     available_months = [m for m in month_order if m in filtered["Month"].dropna().unique()]
@@ -294,7 +426,7 @@ with st.sidebar.expander("Additional Filters", expanded=False):
 
 scorecard = build_scorecard(filtered)
 
-tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard"])
+tabs = st.tabs(["Executive Dashboard", "Activity Planning Dashboard", "Data Review"])
 
 
 with tabs[0]:
@@ -324,7 +456,8 @@ with tabs[0]:
         )
 
         top_subtype = (
-            filtered.groupby("ActivitySubType")
+            filtered[filtered["SubActivityType"] != "Needs Review"]
+            .groupby("SubActivityType")
             .agg(TotalVisitors=("TotalVisitors", "sum"))
             .reset_index()
             .sort_values("TotalVisitors", ascending=False)
@@ -336,7 +469,7 @@ with tabs[0]:
                 f"IRC hosted **{len(filtered):,} activities**, reaching **{filtered['TotalVisitors'].sum():,.0f} visitors** "
                 f"and generating **{filtered['VolunteerHours'].sum():,.1f} volunteer hours**. "
                 f"The highest-attendance activity type was **{top_type.iloc[0]['ActivityType']}**, "
-                f"and the highest-attendance sub activity type was **{top_subtype.iloc[0]['ActivitySubType']}**."
+                f"and the highest-attendance sub activity type was **{top_subtype.iloc[0]['SubActivityType']}**."
             )
 
         col1, col2 = st.columns(2)
@@ -435,6 +568,10 @@ with tabs[0]:
 
             st.dataframe(subtype_table, use_container_width=True, hide_index=True)
 
+            st.caption(
+                "Note: Sub Activity Type is derived from activity names because the raw ActivitySubType field is mostly listed as Unknown."
+            )
+
             st.subheader("Key Takeaways")
 
             expansion = scorecard[scorecard["RecommendationCategory"] == "Expansion Opportunity"]
@@ -450,7 +587,7 @@ with tabs[0]:
 
             if not top_subtype.empty:
                 st.markdown(
-                    f"- **{top_subtype.iloc[0]['ActivitySubType']}** is the strongest sub activity type by total visitors."
+                    f"- **{top_subtype.iloc[0]['SubActivityType']}** is the strongest sub activity type by total visitors."
                 )
 
             if not top_expansion.empty:
@@ -501,7 +638,7 @@ with tabs[1]:
         valid_subtypes = sorted(
             filtered[
                 filtered["ActivityType"].isin(planning_activity_types)
-            ]["ActivitySubType"].dropna().unique()
+            ]["SubActivityType"].dropna().unique()
         )
 
         with c2:
@@ -553,7 +690,7 @@ with tabs[1]:
         comparable = filtered.copy()
 
         comparable = comparable[comparable["ActivityType"].isin(planning_activity_types)]
-        comparable = comparable[comparable["ActivitySubType"].isin(planning_subtypes)]
+        comparable = comparable[comparable["SubActivityType"].isin(planning_subtypes)]
         comparable = comparable[comparable["Month"].isin(planning_months)]
         comparable = comparable[comparable["DayOfWeek"].isin(planning_days)]
 
@@ -657,7 +794,7 @@ with tabs[1]:
                 "Date",
                 "ActivityName",
                 "ActivityType",
-                "ActivitySubType",
+                "SubActivityType",
                 "Organization",
                 "DayOfWeek",
                 "Month",
@@ -672,7 +809,7 @@ with tabs[1]:
             similar_table = similar_table.rename(columns={
                 "ActivityName": "Activity Name",
                 "ActivityType": "Activity Type",
-                "ActivitySubType": "Sub Activity Type",
+                "SubActivityType": "Sub Activity Type",
                 "Organization": "Organization",
                 "DayOfWeek": "Day",
                 "TotalVisitors": "Total Visitors",
@@ -708,3 +845,31 @@ with tabs[1]:
             st.info(
                 "This section can become a short planning summary for Kelley when reviewing a proposed activity."
             )
+
+
+with tabs[2]:
+    st.header("Data Review")
+    st.caption("Review activities that could not be confidently mapped to a sub activity type.")
+
+    review_df = filtered[filtered["SubActivityType"] == "Needs Review"].copy()
+
+    if review_df.empty:
+        st.success("No activities currently require review under the selected filters.")
+    else:
+        st.info(
+            f"{len(review_df):,} activities are currently marked as **Needs Review**. "
+            "These should be reviewed before finalizing sub activity reporting."
+        )
+
+        review_summary = (
+            review_df.groupby(["ActivityType", "ActivityName"])
+            .agg(
+                Activities=("ActivityID", "count"),
+                TotalVisitors=("TotalVisitors", "sum"),
+                AvgVisitors=("TotalVisitors", "mean"),
+            )
+            .reset_index()
+            .sort_values("Activities", ascending=False)
+        )
+
+        st.dataframe(review_summary.head(100), use_container_width=True, hide_index=True)
